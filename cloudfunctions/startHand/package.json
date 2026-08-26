@@ -1,0 +1,9 @@
+{
+  "name": "startHand",
+  "version": "1.0.0",
+  "description": "P2 发牌:洗牌、写私有底牌、收盲注、状态转 preflop",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

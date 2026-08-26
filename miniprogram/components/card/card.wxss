@@ -1,0 +1,55 @@
+/* 扑克牌卡面(P2):纯 CSS,白底圆角;背面深红斜纹 */
+.card {
+  box-sizing: border-box;
+  border-radius: 10rpx;
+  background: #fdfbf5;
+  border: 2rpx solid #c9c4b4;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+/* 尺寸(sm 用于公共牌/对手区,lg 用于我的底牌) */
+.card.sm { width: 52rpx; height: 76rpx; }
+.card.md { width: 64rpx; height: 92rpx; }
+.card.lg { width: 96rpx; height: 136rpx; }
+
+.card.front .rank {
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 1;
+}
+.card.front .suit { line-height: 1; }
+
+.card.sm .rank { font-size: 28rpx; }
+.card.sm .suit { font-size: 24rpx; }
+.card.md .rank { font-size: 34rpx; }
+.card.md .suit { font-size: 28rpx; }
+.card.lg .rank { font-size: 52rpx; }
+.card.lg .suit { font-size: 44rpx; margin-top: 4rpx; }
+
+.card.red .rank,
+.card.red .suit { color: #c0392b; }
+
+/* 牌背:深红底 + 斜纹(渐变模拟) */
+.card.back {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      #7b2d26 0,
+      #7b2d26 8rpx,
+      #8f3a32 8rpx,
+      #8f3a32 16rpx
+    );
+  border-color: #5e211c;
+}
+
+/* 空位:虚线透明框(公共牌未发处) */
+.card.empty {
+  background: transparent;
+  border: 2rpx dashed #3a6647;
+}
+

@@ -1,0 +1,9 @@
+{
+  "name": "joinRoom",
+  "version": "1.0.0",
+  "description": "按 roomCode 入座,分配 seat,初始筹码=config.initialChips",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

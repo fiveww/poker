@@ -1,0 +1,22 @@
+.card {
+  background: #16401f;
+  border-radius: 16rpx;
+  padding: 28rpx 32rpx;
+  margin-bottom: 32rpx;
+}
+.label {
+  font-size: 26rpx;
+  color: #9bb0a3;
+  margin: 20rpx 0 12rpx;
+}
+.label.nomargin { margin: 0; }
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+.row.between { justify-content: space-between; }
+.row .short { flex: 1; }
+.slash { color: #9bb0a3; font-size: 32rpx; }
+.loan-block { margin-top: 12rpx; }
+.hint { margin: 12rpx 0; line-height: 1.5; }

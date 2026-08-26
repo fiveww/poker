@@ -1,0 +1,7 @@
+<!-- 扑克牌:正面 rank + 花色,背面斜纹 -->
+<view class="card {{size}} {{red ? 'red' : ''}} {{faceUp ? 'front' : (empty ? 'empty' : 'back')}}">
+  <block wx:if="{{faceUp}}">
+    <view class="rank">{{rank}}</view>
+    <view class="suit">{{suitChar}}</view>
+  </block>
+</view>

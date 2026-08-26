@@ -1,0 +1,13 @@
+{
+  "pages": ["pages/index/index", "pages/create/create", "pages/room/room"],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#1f6f3a",
+    "navigationBarTitleText": "朋友局德扑",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#0e2a18"
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

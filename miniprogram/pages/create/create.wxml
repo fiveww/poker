@@ -1,0 +1,42 @@
+<view class="container">
+  <view class="card">
+    <view class="label">昵称(可选)</view>
+    <input class="input" placeholder="展示给朋友看" maxlength="16"
+           value="{{nick}}" data-field="nick" bindinput="onInput" />
+
+    <view class="label">小盲 / 大盲(固定不涨)</view>
+    <view class="row">
+      <input class="input short" type="digit" placeholder="10" maxlength="6"
+             value="{{sb}}" data-field="sb" bindinput="onInput" />
+      <text class="slash">/</text>
+      <input class="input short" type="digit" placeholder="20" maxlength="6"
+             value="{{bb}}" data-field="bb" bindinput="onInput" />
+    </view>
+
+    <view class="label">初始筹码</view>
+    <input class="input" type="digit" placeholder="1000" maxlength="8"
+           value="{{initialChips}}" data-field="initialChips" bindinput="onInput" />
+  </view>
+
+  <view class="card">
+    <view class="row between">
+      <text class="label nomargin">借款</text>
+      <switch checked="{{loanEnabled}}" bindchange="toggleLoan" color="#e6c34d" />
+    </view>
+    <view wx:if="{{loanEnabled}}" class="loan-block">
+      <view class="muted hint">开启后:筹码归零方可借,游戏结束强制还款(余额可为负)</view>
+      <view class="label">每次借款额</view>
+      <input class="input" type="digit" placeholder="如 500" maxlength="8"
+             value="{{loanAmount}}" data-field="loanAmount" bindinput="onInput" />
+      <view class="label">累计借款上限(0=不限)</view>
+      <input class="input" type="digit" placeholder="0" maxlength="8"
+             value="{{loanCap}}" data-field="loanCap" bindinput="onInput" />
+      <view class="label">还款倍率(1.0=无息,1.5=借100还150)</view>
+      <input class="input" type="digit" placeholder="1.5" maxlength="4"
+             value="{{loanMult}}" data-field="loanMult" bindinput="onInput" />
+    </view>
+    <view wx:else class="muted hint">默认关闭;开局后由房主在房间内另行开启需重建</view>
+  </view>
+
+  <button class="btn btn-primary" bindtap="onSubmit" loading="{{submitting}}">创建并进入</button>
+</view>

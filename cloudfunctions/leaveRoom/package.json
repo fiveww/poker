@@ -1,0 +1,9 @@
+{
+  "name": "leaveRoom",
+  "version": "1.0.0",
+  "description": "离座;房主踢人;房主离开则转让,无人则关闭",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

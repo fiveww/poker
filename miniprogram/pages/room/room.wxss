@@ -1,0 +1,135 @@
+.code-bar {
+  background: #16401f;
+  border-radius: 16rpx;
+  padding: 28rpx 32rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+.code-label { color: #9bb0a3; font-size: 26rpx; }
+.code { color: #e6c34d; font-size: 40rpx; font-weight: 700; flex: 1; }
+.share { flex: 0 0 auto; padding: 12rpx 24rpx; font-size: 26rpx; }
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 8rpx;
+  margin-bottom: 24rpx;
+}
+
+.players {
+  background: #16401f;
+  border-radius: 16rpx;
+  padding: 24rpx 32rpx;
+  margin-bottom: 48rpx;
+}
+.players-title { color: #9bb0a3; font-size: 26rpx; margin-bottom: 16rpx; }
+.player {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 20rpx 0;
+  border-bottom: 2rpx solid #2c5a36;
+}
+.player:last-child { border-bottom: 0; }
+.p-name { flex: 1; display: flex; align-items: center; gap: 12rpx; }
+.p-chips { color: #e6c34d; font-weight: 600; }
+.tag {
+  font-size: 20rpx;
+  background: #2c5a36;
+  color: #f5f5f5;
+  padding: 2rpx 12rpx;
+  border-radius: 8rpx;
+}
+.tag.me { background: #e6c34d; color: #2a2a2a; }
+.kick { color: #c04040; font-size: 24rpx; padding: 8rpx 16rpx; }
+
+.bottom { margin-top: auto; display: flex; flex-direction: column; gap: 24rpx; }
+.center { align-items: center; justify-content: center; gap: 32rpx; }
+
+/* ======== P2 牌桌视图 ======== */
+.table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+.hand-no { color: #e6c34d; font-weight: 600; }
+.pot {
+  background: #16401f;
+  border-radius: 12rpx;
+  color: #e6c34d;
+  font-weight: 600;
+  padding: 10rpx 24rpx;
+}
+
+.table {
+  background: #16401f;
+  border: 4rpx solid #2c5a36;
+  border-radius: 24rpx;
+  padding: 28rpx 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28rpx;
+  margin-bottom: 32rpx;
+}
+
+/* 对手席位 */
+.seat {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0e2a18;
+  border: 2rpx solid #2c5a36;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12rpx;
+}
+.seat.turn { border-color: #e6c34d; }
+.seat.folded { opacity: 0.45; }
+.seat-top { display: flex; align-items: center; gap: 10rpx; min-width: 160rpx; }
+.s-name { font-size: 26rpx; }
+.chip-btn {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  font-size: 22rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.s-chips { color: #9bb0a3; font-size: 24rpx; margin-right: auto; }
+.s-cards { display: flex; gap: 8rpx; align-items: center; }
+.s-folded { color: #9bb0a3; font-size: 24rpx; }
+.s-bet {
+  color: #e6c34d;
+  font-size: 24rpx;
+  background: rgba(230, 195, 77, 0.12);
+  border-radius: 8rpx;
+  padding: 4rpx 12rpx;
+}
+
+/* 公共区 */
+.community { display: flex; gap: 14rpx; }
+
+/* 我的底牌面板 */
+.me-panel {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0e2a18;
+  border: 2rpx solid #3a6647;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+}
+.me-cards { display: flex; gap: 16rpx; }
+.me-info { display: flex; flex-wrap: wrap; align-items: center; gap: 14rpx; }

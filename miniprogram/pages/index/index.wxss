@@ -1,0 +1,46 @@
+.hero {
+  text-align: center;
+  margin-bottom: 48rpx;
+}
+.hero .title {
+  font-size: 52rpx;
+  font-weight: 700;
+  color: #e6c34d;
+}
+.hero .subtitle {
+  font-size: 24rpx;
+  color: #9bb0a3;
+  margin-top: 12rpx;
+}
+
+.login-status {
+  background: #16401f;
+  border-radius: 16rpx;
+  padding: 28rpx 32rpx;
+  margin-bottom: 48rpx;
+}
+.login-status .ok {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+.login-status .openid {
+  color: #9bb0a3;
+  font-size: 24rpx;
+  word-break: break-all;
+}
+.login-status .loading {
+  color: #9bb0a3;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.footer {
+  margin-top: 64rpx;
+  text-align: center;
+  line-height: 1.6;
+}

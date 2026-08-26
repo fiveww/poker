@@ -1,0 +1,27 @@
+<view class="container">
+  <view class="hero">
+    <view class="title">朋友局德州扑克</view>
+    <view class="subtitle">仅微信小程序 · 微信云开发</view>
+  </view>
+
+  <view class="login-status">
+    <view wx:if="{{ready}}" class="ok">
+      <text>已登录</text>
+      <text class="openid">openid: {{openid || '(空)'}}</text>
+    </view>
+    <view wx:else class="loading">
+      <text>正在登录…</text>
+    </view>
+  </view>
+
+  <view class="actions">
+    <input class="input" placeholder="昵称(可选)" maxlength="16"
+           value="{{nick}}" bindinput="onInputNick" />
+    <button class="btn btn-primary" bindtap="onCreateRoom">创建房间</button>
+    <input class="input" placeholder="输入房间号" maxlength="8"
+           value="{{roomCode}}" bindinput="onInputRoomCode" />
+    <button class="btn btn-ghost" bindtap="onJoinRoom">加入房间</button>
+  </view>
+
+  <view class="muted footer">P1 房间:创建/加入/离开 + 实时同步。发牌在 P2 接入。</view>
+</view>

@@ -1,0 +1,94 @@
+<view class="container" wx:if="{{room}}">
+  <!-- ======== 牌桌视图(一手进行中)======== -->
+  <block wx:if="{{playing}}">
+    <view class="table-head">
+      <text class="hand-no">第 {{room.handNo}} 手</text>
+      <text class="muted">{{statusLabel}}</text>
+      <view class="pot">底池 {{room.pot}}</view>
+    </view>
+
+    <view class="table">
+      <!-- 对手席位 -->
+      <view wx:for="{{opponents}}" wx:key="openid" class="seat {{item.isTurn ? 'turn' : ''}} {{item.folded ? 'folded' : ''}}">
+        <view class="seat-top">
+          <text class="s-name">{{item.name}}</text>
+          <text wx:if="{{item.isDealer}}" class="chip-btn">D</text>
+        </view>
+        <view class="s-chips">{{item.chips}}</view>
+        <view class="s-cards">
+          <card wx:if="{{!item.folded}}" size="sm" card="back" />
+          <card wx:if="{{!item.folded}}" size="sm" card="back" />
+          <text wx:else class="s-folded">已弃牌</text>
+        </view>
+        <view wx:if="{{item.bet > 0}}" class="s-bet">{{item.bet}}</view>
+      </view>
+
+      <!-- 公共区:5 张公共牌 -->
+      <view class="community">
+        <card wx:for="{{communitySlots}}" wx:key="index" wx:for-item="c" size="md" card="{{c}}" />
+      </view>
+
+      <!-- 我的底牌 + 筹码 -->
+      <view class="me-panel">
+        <view class="me-cards">
+          <card wx:for="{{myHoleCards}}" wx:key="index" size="lg" card="{{item}}" />
+          <card wx:if="{{myHoleCards.length === 0}}" size="lg" card="" />
+          <card wx:if="{{myHoleCards.length === 0}}" size="lg" card="" />
+        </view>
+        <view class="me-info">
+          <text>{{nickname}}</text>
+          <text class="p-chips">{{myPlayer.chips || 0}}</text>
+          <text wx:if="{{myPlayer && myPlayer.bet > 0}}" class="s-bet">本轮 {{myPlayer.bet}}</text>
+          <text wx:if="{{myPlayer.isTurn}}" class="tag me">轮到你行动</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="bottom">
+      <button class="btn btn-ghost" bindtap="onLeave">离开房间</button>
+    </view>
+  </block>
+
+  <!-- ======== 大厅视图(waiting)======== -->
+  <block wx:else>
+    <view class="code-bar">
+      <view class="code-label">房间号</view>
+      <view class="code" bindtap="onCopyCode">{{room.roomCode}}  (点击复制)</view>
+      <button class="btn btn-ghost share" open-type="share">邀请好友</button>
+    </view>
+
+    <view class="info-row">
+      <text class="muted">盲注 {{room.config.sb}} / {{room.config.bb}}</text>
+      <text class="muted">初始 {{room.config.initialChips}}</text>
+      <text class="muted">{{room.config.loan.enabled ? '借款开' : '借款关'}}</text>
+    </view>
+
+    <view class="players">
+      <view class="players-title">玩家 ({{room.players.length}}/10)</view>
+      <view wx:for="{{room.players}}" wx:key="openid" class="player">
+        <view class="p-name">
+          <text>{{item.name}}</text>
+          <text wx:if="{{item.openid === room.hostOpenid}}" class="tag">房主</text>
+          <text wx:if="{{item.openid === openid}}" class="tag me">你</text>
+        </view>
+        <view class="p-chips">{{item.chips}}</view>
+        <view wx:if="{{isHost && item.openid !== openid && room.status === 'waiting'}}" class="kick" data-openid="{{item.openid}}" bindtap="onKick">移出</view>
+      </view>
+    </view>
+
+    <view class="bottom">
+      <button wx:if="{{isHost}}" class="btn btn-primary" bindtap="onStart">{{room.players.length >= 2 ? '开始发牌' : '等待玩家加入…'}}</button>
+      <button wx:if="{{isHost && room.players.length < 2}}" class="btn btn-ghost" disabled>至少 2 人开局</button>
+      <button class="btn btn-ghost" bindtap="onLeave">离开房间</button>
+    </view>
+  </block>
+</view>
+
+<view class="container center" wx:elif="{{watcherReady}}">
+  <view class="muted">房间已关闭或不存在</view>
+  <button class="btn btn-ghost" bindtap="onBack">返回</button>
+</view>
+
+<view class="container center" wx:else>
+  <view class="muted">正在连接房间…</view>
+</view>

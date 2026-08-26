@@ -1,0 +1,9 @@
+{
+  "name": "createRoom",
+  "version": "1.0.0",
+  "description": "建房:盲注/筹码/借款配置(借款默认关),生成 roomCode,初始化 rooms 文档",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
