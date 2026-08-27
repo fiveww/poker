@@ -1,6 +1,6 @@
 # 朋友局德州扑克 · 微信小程序
 
-按 `技术方案.md` 分阶段实现。当前进度:**P2(发牌)**。
+按 `技术方案.md` 分阶段实现。当前进度:**P3(下注)**。
 
 ## 目录结构
 
@@ -14,10 +14,10 @@ myownproject/
     sitemap.json
     pages/index/                # 首页:登录态 + 房间入口(支持分享带入 roomCode)
     pages/create/               # P1 建房配置:盲注/筹码/借款(借款默认关)
-    pages/room/                 # P1 房间页:watch rooms、玩家列表、分享、离座
+    pages/room/                 # P1 房间页 + P2 牌桌视图 + P3 行动条(watch rooms、玩家列表、分享、离座)
     pages/history/              # 历史对局:本机曾加入房间列表,一键重新加入(失效自动清理)
     services/cloud.js           # callFunction 封装
-    services/actions.js         # createRoom/joinRoom/leaveRoom/startHand
+    services/actions.js         # createRoom/joinRoom/leaveRoom/startHand/doAction
     services/history.js         # 本地房间历史(wx storage,LRU 上限 20)
     components/card/            # P2 扑克牌组件(正面/背面/空位,纯 CSS 无图片)
   cloudfunctions/
@@ -26,6 +26,7 @@ myownproject/
     joinRoom/                   # P1 入座:分配 seat + 初始筹码
     leaveRoom/                  # P1 离座/房主踢人/转让房主
     startHand/                  # P2 开一手:CSPRNG 洗牌、私有发底牌、收盲注
+    action/                     # P3 下注:fold/check/call/raise/allIn 校验与轮转推进
   database/                     # 集合安全规则
     rooms.json hands.json handHistory.json users.json
 ```
@@ -55,6 +56,18 @@ myownproject/
 - [x] 房间页牌桌视图:对手席(牌背/弃牌态/D 位/轮到高亮)+ 公共区 5 格 + 我的底牌大卡
 - [x] 底牌获取:`hands` watch 实时推送 + 主动拉取兜底(云函数写库推送不可靠,§14.1)
 
+## P3 验收清单
+
+- [x] `action` 云函数:version CAS 防并发 / openid == turnSeat 校验(§6.3)
+- [x] 动作校验:check 须无人下注;raise ≥ currentBet+minRaise(不足额仅允许纯 all-in);call 短码自动 all-in 截断;allIn 一键全下
+- [x] 完整加注重开行动权(其他玩家 acted 清零)并更新 minRaise;短码 all-in 不重开
+- [x] 本轮结束判定(所有未 fold 未 allIn 者已行动且下注相等)→ 发 flop(3 张)/turn/river 公共牌(排除已发底牌,CSPRNG 抽取),重置 bet/currentBet/minRaise
+- [x] river 结束或剩余可行动玩家 <2 → 直接补齐公共牌进 `showdown`(评牌分池属 P4)
+- [x] 只剩 1 人未 fold → 直接获胜默认 muck:赢家拿底池、回 `waiting`、handNo++,可立刻开下一手
+- [x] ActionBar UI:弃牌/看牌/跟注/加注(滑杆+最小/半池/满池/全下预设)/全下;非本人行动显示「等待 XX」
+- [x] 行动顺序符合真实规则(模拟测试验证):≥3 人 preflop 从大盲后一位开始、postflop 每轮从小盲(庄家下一位)开始;**单挑 preflop 庄家(兼小盲)先动、postflop 大盲先动**
+- [x] 界面标注小盲/大盲身份(单挑时庄家同时显示 D + 小盲),行动条下有「能否看牌」的规则提示
+
 ## 首次使用(需手动操作)
 
 1. 在[微信公众平台](https://mp.weixin.qq.com)注册小程序,拿到 **AppID**,替换:
@@ -68,9 +81,11 @@ myownproject/
    - `cloudfunctions/createRoom`
    - `cloudfunctions/joinRoom`
    - `cloudfunctions/leaveRoom`
-   - `cloudfunctions/startHand`(P2 新增)
+   - `cloudfunctions/startHand`
+   - `cloudfunctions/action`(P3 新增)
 5. 编译运行:首页输入昵称 → 「创建房间」配置盲注/筹码 → 进入房间页 → 邀请好友(分享)→ 朋友输入房间号或点分享卡「加入房间」→ 双方实时看到彼此入座。
 6. P2 发牌:≥2 人后房主点「开始发牌」→ 房间页切到牌桌视图,各自看到自己的 2 张底牌(他人只见牌背),盲注已入池。
+7. P3 下注:轮到本人时底部出现动作条(弃牌/看牌/跟注/加注/全下)→ 下注轮结束自动发公共牌;全部弃牌则剩者独赢并回到大厅可开下一手;打到河牌行动完进入摊牌(结算分池在 P4)。
 
 > 体验版:小程序后台「版本管理」设为体验版,仅体验成员可进,免审核免备案。
 
@@ -78,4 +93,4 @@ myownproject/
 
 ## 下一阶段
 
-P3 下注:`action` 云函数(fold/check/call/raise/allIn 校验与轮转)+ ActionBar 按钮,能完整打一手到摊牌前的下注推进。
+P4 结算:flop/turn/river 已由 P3 发完,接下来是摊牌评牌(`pokersolver`)、单池分配、借款自动还款预留、`handHistory` 落库与 `lastHandSnapshot`(为 P8 投票回退做准备)。注意:P4 上线前打到 `showdown` 的房间会停在摊牌态,可在云开发控制台手动把 `rooms.status` 改回 `waiting` 复用。

@@ -123,7 +123,10 @@ exports.main = async (event) => {
       ts: now,
       openid,
       type: 'hand',
-      text: '第 ' + room.handNo + ' 手开始 · 庄家座位 ' + dealerSeat
+      text:
+        '第 ' + room.handNo + ' 手开始 · 庄家座位 ' + dealerSeat +
+        ' · 小盲座位 ' + sbSeat + ' · 大盲座位 ' + bbSeat +
+        (n === 2 ? '(单挑:庄家=小盲,preflop 庄家先动,postflop 大盲先动)' : '')
     }
   ])
 
@@ -148,6 +151,7 @@ exports.main = async (event) => {
         allIn: !!p.allIn,
         bet: p.bet,
         totalBet: p.bet,
+        acted: false, // P3:本轮是否已行动(BB 的 option / 加注重开行动都靠它判定)
         connected: true,
         lastSeen: now
       })),

@@ -14,6 +14,8 @@
           <view class="seat-top">
             <text class="s-name">{{item.name}}</text>
             <text wx:if="{{item.isDealer}}" class="chip-btn">D</text>
+            <text wx:if="{{item.isSB}}" class="tag blind">小盲</text>
+            <text wx:elif="{{item.isBB}}" class="tag blind">大盲</text>
           </view>
           <view class="s-chips">筹码 {{item.chips}}</view>
         </view>
@@ -48,6 +50,9 @@
         <view class="me-meta">
           <view class="me-name">
             <text>{{myPlayer.name}}</text>
+            <text wx:if="{{myPlayer.isDealer}}" class="chip-btn">D</text>
+            <text wx:if="{{myPlayer.isSB}}" class="tag blind">小盲</text>
+            <text wx:elif="{{myPlayer.isBB}}" class="tag blind">大盲</text>
             <text wx:if="{{myPlayer.isTurn}}" class="tag me">轮到你行动</text>
           </view>
           <view class="me-chips">筹码 {{myPlayer.chips || 0}}</view>
@@ -57,7 +62,38 @@
     </view>
 
     <view class="bottom">
-      <view class="muted center-text">下注操作将在 P3 上线</view>
+      <!-- 本人行动:动作条 -->
+      <block wx:if="{{actionBar.myTurn}}">
+        <!-- 加注面板 -->
+        <view wx:if="{{raisePanel}}" class="raise-panel">
+          <view class="presets">
+            <button class="preset" size="mini" data-v="{{actionBar.minTo}}" bindtap="onPreset">最小 {{actionBar.minTo}}</button>
+            <button wx:if="{{actionBar.presetHalf > actionBar.minTo}}" class="preset" size="mini" data-v="{{actionBar.presetHalf}}" bindtap="onPreset">半池 {{actionBar.presetHalf}}</button>
+            <button class="preset" size="mini" data-v="{{actionBar.presetPot}}" bindtap="onPreset">满池 {{actionBar.presetPot}}</button>
+            <button class="preset allin" size="mini" data-v="{{actionBar.presetAllIn}}" bindtap="onPreset">全下 {{actionBar.presetAllIn}}</button>
+          </view>
+          <slider min="{{actionBar.minTo}}" max="{{actionBar.maxTo}}" step="{{actionBar.step}}" value="{{actionBar.raiseTo}}" activeColor="#e6c34d" backgroundColor="#2c5a36" block-size="20" bindchanging="onRaiseSlide" bindchange="onRaiseSlide" />
+          <view class="raise-actions">
+            <button class="btn btn-ghost" size="mini" bindtap="onRaisePanelClose">取消</button>
+            <button class="btn btn-primary" size="mini" bindtap="onRaiseConfirm">加注到 {{actionBar.raiseTo}}</button>
+          </view>
+        </view>
+
+        <view class="action-bar">
+          <button class="btn act fold" bindtap="onFold">弃牌</button>
+          <button wx:if="{{actionBar.canCheck}}" class="btn act check" bindtap="onCheck">看牌</button>
+          <button wx:else class="btn act call" bindtap="onCall">跟注 {{actionBar.callAmt}}</button>
+          <button wx:if="{{actionBar.canRaise}}" class="btn act raise" bindtap="onRaisePanelOpen">加注</button>
+          <button wx:if="{{actionBar.canRaise && actionBar.maxTo >= actionBar.minTo}}" class="btn act allin" bindtap="onAllIn">全下</button>
+        </view>
+        <view class="muted center-text act-hint">{{actionBar.canCheck ? '无人加注,可看牌把行动传给下家' : '面前有下注:只能跟注 / 加注 / 弃牌'}}</view>
+      </block>
+
+      <!-- 非本人行动 / 手结束等状态提示 -->
+      <block wx:else>
+        <view wx:if="{{playing && room.status === 'showdown'}}" class="muted center-text">摊牌中 — 结算将在 P4 上线,届时自动分池并回到大厅</view>
+        <view wx:elif="{{playing && room.turnSeat !== -1}}" class="muted center-text">等待 {{turnName}} 行动…</view>
+      </block>
     </view>
   </block>
 

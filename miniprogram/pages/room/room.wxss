@@ -43,6 +43,7 @@
   border-radius: 8rpx;
 }
 .tag.me { background: #e6c34d; color: #2a2a2a; }
+.tag.blind { background: #4a3010; color: #e6c34d; border: 2rpx solid #6b4a1a; }
 .kick { color: #c04040; font-size: 24rpx; padding: 8rpx 16rpx; }
 
 .bottom { margin-top: auto; display: flex; flex-direction: column; gap: 24rpx; }
@@ -145,3 +146,77 @@
 .me-chips { color: #e6c34d; font-size: 32rpx; font-weight: 700; }
 .danger { border-color: #c04040; color: #c04040; }
 .center-text { text-align: center; line-height: 1.6; }
+
+/* ======== P3 行动条 ======== */
+.action-bar {
+  display: flex;
+  gap: 16rpx;
+}
+.btn.act {
+  flex: 1;
+  margin: 0;
+  font-size: 30rpx;
+  padding-left: 0;
+  padding-right: 0;
+}
+.act.fold {
+  background: #4a1f22;
+  color: #e88;
+  border: 2rpx solid #6b3033;
+}
+.act.check,
+.act.call {
+  background: #16401f;
+  color: #8fd19e;
+  border: 2rpx solid #2c5a36;
+}
+.act.raise {
+  background: #16401f;
+  color: #e6c34d;
+  border: 2rpx solid #a3853a;
+}
+.act.allin {
+  background: #4a3010;
+  color: #e6c34d;
+  border: 2rpx solid #a3853a;
+}
+
+.raise-panel {
+  background: #16401f;
+  border: 2rpx solid #2c5a36;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+.presets {
+  display: flex;
+  gap: 12rpx;
+  justify-content: space-between;
+}
+.preset {
+  flex: 1;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+  background: #0e2a18;
+  border: 2rpx solid #2c5a36;
+  color: #9bb0a3;
+  font-size: 22rpx;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.preset.allin {
+  border-color: #a3853a;
+  color: #e6c34d;
+}
+.raise-actions {
+  display: flex;
+  gap: 16rpx;
+  justify-content: space-between;
+}
+.act-hint {
+  font-size: 24rpx;
+  margin-top: -8rpx;
+}

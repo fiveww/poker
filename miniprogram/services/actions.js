@@ -22,9 +22,15 @@ function startHand(roomId) {
   return call('startHand', { roomId })
 }
 
+// 玩家行动(P3):version 走房间文档 CAS;raise 的 amount = 加注到的总额(非增量)
+function doAction(roomId, version, action, amount) {
+  return call('action', { roomId, version, action, amount })
+}
+
 module.exports = {
   createRoom,
   joinRoom,
   leaveRoom,
-  startHand
+  startHand,
+  doAction
 }
