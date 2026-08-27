@@ -144,6 +144,7 @@ exports.main = async (event) => {
       pot: [...bySeat.values()].reduce((s, p) => s + p.bet, 0),
       communityCards: [],
       revealedHands: [], // 每手开始清空主动亮牌(§6.5)
+      lastResult: null, // 每手开始清空上一手结算面板(P4)
       endVote: { active: false, initiator: '', yes: [], no: [], threshold: 'all', triggeredHandNo: 0 },
       players: players.map((p) => ({
         ...p,

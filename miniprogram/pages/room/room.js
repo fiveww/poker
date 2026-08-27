@@ -184,6 +184,24 @@ Page({
     const community = room.communityCards || []
     const communitySlots = [0, 1, 2, 3, 4].map((i) => community[i] || '')
 
+    // —— P4 大厅「上局结果」面板(WXML 不能调方法,在此展开成渲染友好的结构)——
+    const lr = room.lastResult
+    let lastResultView = null
+    if (!playing && lr && lr.handNo) {
+      lastResultView = {
+        title: lr.title || '第 ' + lr.handNo + ' 手结束',
+        lines: lr.lines || [],
+        potTotal: lr.potTotal || 0,
+        communitySlots: [0, 1, 2, 3, 4].map((i) => (lr.community || [])[i] || ''),
+        reveals: (lr.reveals || []).map((r) => ({
+          openid: r.openid,
+          nick: r.nick || '玩家',
+          cards: r.holeCards || [],
+          hand: r.hand || ''
+        }))
+      }
+    }
+
     // —— P3 行动条预计算(WXML 不能调方法,全部在此算好)——
     const BETTING = ['preflop', 'flop', 'turn', 'river']
     let actionBar = null
@@ -231,6 +249,7 @@ Page({
       myPlayer,
       statusLabel: STATUS_LABELS[room.status] || '',
       communitySlots,
+      lastResultView,
       actionBar,
       turnName
     })

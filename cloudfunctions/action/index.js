@@ -1,9 +1,12 @@
-// action 云函数(P3 下注)
+// action 云函数(P3 下注 + P4 摊牌结算)
 // 玩家行动:fold/check/call/raise/allIn。CAS 校验 version(§13)→ 校验轮到本人 →
 // 动作合法性校验 → 更新 bet/chips/pot/currentBet/minRaise → 推进 turnSeat。
 // 本轮结束判定:所有可行动玩家(未 fold 未 allIn)已行动且下注相等 → 发下一街公共牌;
-// river 结束 → showdown(P4 才评牌分池);可行动玩家 <2 → 直接发完 5 张进 showdown。
-// 只剩 1 人未 fold → 直接获胜(muck,不进 showdown),赢家拿底池,回到 waiting(§6.3.6)。
+// river 结束或可行动玩家 <2 → 发满 5 张后在 action 内原子完成摊牌结算(P4,§6.4):
+// 内置评牌器选 7 选 5 判型 → 单池分池(平分余数按庄家左侧顺序,不冲抵欠款 §10.3)
+// → 未弃牌者底牌全亮写回 revealedHands → 写 lastHandSnapshot(投票回退点,§9.1)→ 回 waiting。
+// 只剩 1 人未 fold → 直接获胜(muck 不进摊牌,默认不亮牌,§6.5),同样落快照与流水。
+// 每种手终都写一条 handHistory(未主动亮牌者不落底牌,§4.3 隐私约定)+ lastResult 结果面板数据。
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
@@ -12,6 +15,7 @@ const db = cloud.database()
 const _ = db.command
 const ROOMS = db.collection('rooms')
 const HANDS = db.collection('hands')
+const HANDHISTORY = db.collection('handHistory')
 
 const SUITS = ['s', 'h', 'd', 'c']
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
@@ -20,12 +24,112 @@ const BETTING_STATES = ['preflop', 'flop', 'turn', 'river']
 const NEXT_STREET = { preflop: 'flop', flop: 'turn', turn: 'river' }
 const STREET_CARDS = { flop: 3, turn: 1, river: 1 }
 
+const LOG_LIMIT = 50 // rooms.log 截断上限,防文档无限膨胀
+
+// ==================== P4 牌型判定(内置评牌器,零依赖)====================
+// 技术方案原定 pokersolver npm 库,实际实现改为内置:C(7,5)=21 组合穷举打分。
+const RANK_VAL = {}
+RANKS.forEach((r, i) => (RANK_VAL[r] = i + 2)) // 2..14
+const VAL_NAME = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' }
+const valName = (v) => VAL_NAME[v] || String(v)
+const CAT_TEXT = ['高牌', '一对', '两对', '三条', '顺子', '同花', '葫芦', '四条', '同花顺']
+
+// C(n,5) 全组合下标
+function comboIndices(n) {
+  const res = []
+  const rec = (start, cur) => {
+    if (cur.length === 5) {
+      res.push(cur.slice())
+      return
+    }
+    for (let i = start; i < n; i++) {
+      cur.push(i)
+      rec(i + 1, cur)
+      cur.pop()
+    }
+  }
+  rec(0, [])
+  return res
+}
+
+// 5 张牌打分为可比较数组 [类别, 决胜张...] 类别越大越强(8=同花顺 … 0=高牌)
+function score5(cards) {
+  const vals = cards.map((c) => RANK_VAL[c[0]]).sort((a, b) => b - a)
+  const flush = cards.every((c) => c[1] === cards[0][1])
+  let straightHigh = 0
+  const uniq = [...new Set(vals)]
+  if (uniq.length === 5) {
+    if (uniq[0] - uniq[4] === 4) straightHigh = uniq[0]
+    else if (uniq[0] === 14 && uniq[1] === 5) straightHigh = 5 // A2345 轮子
+  }
+  const cnt = {}
+  vals.forEach((v) => (cnt[v] = (cnt[v] || 0) + 1))
+  const groups = Object.entries(cnt)
+    .map(([v, c]) => ({ v: +v, c }))
+    .sort((a, b) => b.c - a.c || b.v - a.v)
+  if (flush && straightHigh) return [8, straightHigh]
+  if (groups[0].c === 4) return [7, groups[0].v, groups[1].v]
+  if (groups[0].c === 3 && groups[1].c === 2) return [6, groups[0].v, groups[1].v]
+  if (flush) return [5].concat(vals)
+  if (straightHigh) return [4, straightHigh]
+  if (groups[0].c === 3) return [3, groups[0].v, groups[1].v, groups[2].v]
+  if (groups[0].c === 2 && groups[1].c === 2) return [2, groups[0].v, groups[1].v, groups[2].v]
+  if (groups[0].c === 2) return [1, groups[0].v, groups[1].v, groups[2].v, groups[3].v]
+  return [0].concat(vals)
+}
+
+function cmpScore(a, b) {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (a[i] || 0) - (b[i] || 0)
+    if (d) return d
+  }
+  return 0
+}
+
+function describe(score) {
+  const cat = score[0]
+  if (cat === 8) return score[1] === 14 ? '皇家同花顺' : '同花顺(' + valName(score[1]) + ' 高)'
+  if (cat === 7) return '四条 ' + valName(score[1])
+  if (cat === 6) return '葫芦(' + valName(score[1]) + ' 带 ' + valName(score[2]) + ')'
+  if (cat === 4) return '顺子(' + valName(score[1]) + ' 高)'
+  if (cat === 3) return '三条 ' + valName(score[1])
+  if (cat === 2) return '两对 ' + valName(score[1]) + ' 和 ' + valName(score[2])
+  if (cat === 1) return '一对 ' + valName(score[1])
+  if (cat === 0) return '高牌 ' + valName(score[1])
+  return CAT_TEXT[cat]
+}
+
+// 5~7 张里选最强 5 张(公共牌 5 张 + 底牌 2 张 → C(7,5)=21 次)
+function bestOf(cards) {
+  let best = null
+  comboIndices(cards.length).forEach((idx) => {
+    const s = score5(idx.map((i) => cards[i]))
+    if (!best || cmpScore(s, best.score) > 0) best = { score: s }
+  })
+  best.text = describe(best.score)
+  return best
+}
+
+// ==================== 共用小工具 ====================
+
+// 本房间全部私有底牌 Map(openid → holeCards),按请求缓存(ctx):
+// 同一次调用里「发补牌排除」和「摊牌评牌」共用这一次查询,减少串行库操作防超时。
+function loadHandMapOnce(ctx, roomId) {
+  if (!ctx.handMapPromise) {
+    ctx.handMapPromise = HANDS.where({ roomId })
+      .get()
+      .then((res) => new Map(res.data.map((d) => [d.ownerOpenid, d.holeCards || []])))
+      .catch(() => new Map())
+  }
+  return ctx.handMapPromise
+}
+
 // 从「未发出的牌」里随机抽 n 张(CSPRNG):排除所有人底牌(hands 私有文档)+ 已亮公共牌
-async function dealCards(roomId, community, n) {
+async function dealCards(ctx, roomId, community, n) {
   const used = new Set()
   ;(community || []).forEach((c) => used.add(c))
-  const handDocs = await HANDS.where({ roomId }).get().catch(() => ({ data: [] }))
-  handDocs.data.forEach((d) => (d.holeCards || []).forEach((c) => used.add(c)))
+  const handMap = await loadHandMapOnce(ctx, roomId)
+  handMap.forEach((cards) => cards.forEach((c) => used.add(c)))
   const deck = []
   for (const s of SUITS) for (const r of RANKS) if (!used.has(r + s)) deck.push(r + s)
   const out = []
@@ -37,7 +141,55 @@ async function dealCards(roomId, community, n) {
   return out
 }
 
+// 上一手结算后、按钮移动前的快照(投票回退点,§9.1)
+function makeSnapshot(handNo, players, dealerSeat, communityCards) {
+  return {
+    handNo,
+    players: players.map((p) => ({
+      seat: p.seat,
+      chips: p.chips,
+      loan: p.loan || 0,
+      debt: p.debt || 0,
+      repaid: p.repaid || 0,
+      folded: !!p.folded
+    })),
+    dealerSeat,
+    communityCards
+  }
+}
+
+// 取当前手的动作流水切片:最近一条「第 N 手开始」之后的 log 条目
+function sliceHandActions(log) {
+  const arr = log || []
+  let start = -1
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i].type === 'hand' && /开始/.test(arr[i].text || '')) {
+      start = i
+      break
+    }
+  }
+  return arr.slice(start + 1).map((e) => ({ ts: e.ts, openid: e.openid, text: e.text }))
+}
+
+// 客户端入口:快速校验 + 统一捕获业务异常。
+// -504002(执行失败)通常 = 超时或未捕获异常;在此归一后前端 toast 能看到真实原因,
+// 云端日志也有完整 stack(此前摊牌结算抛错时客户端只能看到笼统的 fail)。
 exports.main = async (event) => {
+  const openid = cloud.getWXContext().OPENID
+  if (!openid) return { ok: false, code: 'NO_AUTH', error: '无 openid' }
+  try {
+    return await doAction(event)
+  } catch (e) {
+    console.error('action failed', event && event.roomId, e)
+    return {
+      ok: false,
+      code: 'INTERNAL_ERROR',
+      error: '服务器异常,请重试(' + ((e && e.message) || String(e)) + ')'
+    }
+  }
+}
+
+async function doAction(event) {
   const wxContext = cloud.getWXContext()
   const openid = wxContext.OPENID
   if (!openid) return { ok: false, code: 'NO_AUTH', error: '无 openid' }
@@ -51,6 +203,7 @@ exports.main = async (event) => {
   if (!['fold', 'check', 'call', 'raise', 'allin'].includes(act)) {
     return { ok: false, code: 'BAD_ACTION', error: '未知动作' }
   }
+  const fnCtx = {} // 本次请求内 hands 查询缓存(见 loadHandMapOnce)
 
   const found = await ROOMS.doc(roomId).get().catch(() => null)
   if (!found || !found.data) return { ok: false, code: 'NOT_FOUND', error: '房间不存在' }
@@ -148,15 +301,19 @@ exports.main = async (event) => {
   const survivors = players.filter((p) => !p.folded)
 
   const updateData = {}
+  // 手终产出(两种路径统一):开奖流水文档 + 赢家名单,须等 CAS 成功后再落库/返回
+  let historyDoc = null
+  let handWinners = []
 
-  // —— 只剩 1 人未 fold:直接获胜,默认 muck,回 waiting(§6.3.6)——
-  if (survivors.length === 1) {
-    const winner = survivors[0]
-    winner.chips += room.pot
+  // —— 结算通用收尾(§6.3.6 / §6.4 第 7~8 步):清桌、快照、结果面板、日志 ——
+  // chips 此刻必须已是派池后状态;totalWinByOpenid 用于记每手盈亏 delta
+  const finishHand = (totalWinByOpenid, potTotal, communityNow, lines, logTextHand) => {
     players.forEach((p) => {
       p.bet = 0
       p.acted = false
     })
+    const now = Date.now()
+    const revealedList = (room.revealedHands || []).slice()
     updateData.status = 'waiting'
     updateData.bettingRound = ''
     updateData.pot = 0
@@ -165,15 +322,82 @@ exports.main = async (event) => {
     updateData.turnSeat = -1
     updateData.handNo = room.handNo + 1 // 本手结束,号让位给下一手
     updateData.players = players
-    updateData.log = (room.log || []).concat([
-      { ts: Date.now(), openid, type: 'action', text: logText },
-      {
-        ts: Date.now(),
-        openid,
-        type: 'hand',
-        text: (winner.nick || '玩家') + ' 独赢底池 ' + room.pot + '(其余人弃牌)'
-      }
+    updateData.communityCards = communityNow // 保留到大厅结果面板展示,startHand 时再清
+    // 纯对象字段用 _.set 整体替换:CloudBase 会把裸对象展开成子路径写入,
+    // 上个值若是 null(startHand 重置过)就会报 Cannot create field 'xxx'
+    updateData.lastHandSnapshot = _.set(
+      makeSnapshot(room.handNo, players, room.dealerSeat, communityNow)
+    )
+    const winMap = totalWinByOpenid
+    historyDoc = {
+      roomId,
+      handNo: room.handNo,
+      ts: now,
+      players: players.map((p) => {
+        const pub = revealedList.find((r) => r.openid === p.openid) // 仅公开亮出的牌才落库(隐私约定 §4.3)
+        return {
+          openid: p.openid,
+          nick: p.nick || '',
+          seat: p.seat,
+          holeCards: pub ? pub.holeCards : [],
+          holeRevealed: !!pub,
+          finalChips: p.chips,
+          delta: (winMap[p.openid] || 0) - (p.totalBet || 0),
+          loan: p.loan || 0,
+          debt: p.debt || 0,
+          repaid: p.repaid || 0,
+          folded: !!p.folded
+        }
+      }),
+      communityCards: communityNow,
+      sidePots: [],
+      actions: sliceHandActions(room.log),
+      favorite: false,
+      isFinal: false
+    }
+    updateData.lastResult = _.set({
+      handNo: room.handNo,
+      title: '第 ' + room.handNo + ' 手结束',
+      lines,
+      potTotal,
+      community: communityNow,
+      reveals: revealedList.map((r) => ({
+        openid: r.openid,
+        nick: r.nick || '',
+        holeCards: r.holeCards || [],
+        hand: r.hand || ''
+      })),
+      ts: now
+    })
+    updateData.log = (room.log || []).slice(-LOG_LIMIT).concat([
+      { ts: now, openid, type: 'action', text: logText },
+      { ts: now, openid, type: 'hand', text: logTextHand }
     ])
+  }
+
+  // —— 只剩 1 人未 fold:直接获胜回 waiting(§6.3.6)。
+  // 赢家底牌默认 muck(可主动 revealCards 自亮);桌面公共牌补发至完整 5 张
+  // 进结果面板展示(仅展示用,不影响已结算的输赢)。
+  if (survivors.length === 1) {
+    const winner = survivors[0]
+    const potAtEnd = room.pot
+    winner.chips += potAtEnd // 分池不冲抵欠款(定版变更 §10.3)
+    const communityNow = room.communityCards || []
+    const need = 5 - communityNow.length
+    const fullBoard =
+      need > 0 ? communityNow.concat(await dealCards(fnCtx, roomId, communityNow, need)) : communityNow.slice()
+    const line =
+      (winner.nick || '玩家') + ' 独赢底池 ' + potAtEnd + '(其余人弃牌)'
+    finishHand(
+      { [winner.openid]: potAtEnd },
+      potAtEnd,
+      fullBoard,
+      [line],
+      line
+    )
+    handWinners = [
+      { openid: winner.openid, nick: winner.nick || '', hand: '', potShare: potAtEnd }
+    ]
   } else {
     // —— 本轮结束判定:所有能行动者都已行动且下注相等 ——
     const actors = players.filter((p) => !p.folded && !p.allIn)
@@ -191,35 +415,111 @@ exports.main = async (event) => {
 
       if (street === 'river' || noMoreBetting) {
         const need = 5 - community.length
-        if (need > 0) newCommunity = newCommunity.concat(await dealCards(roomId, community, need))
-        updateData.status = 'showdown'
-        updateData.turnSeat = -1
+        if (need > 0) {
+          newCommunity = newCommunity.concat(await dealCards(fnCtx, roomId, community, need))
+        }
+
+        // —— P4 摊牌结算(action 内原子完成,§6.4):评牌 → 单池分池 → 冲抵 → 回 waiting ——
+        const handMap = await loadHandMapOnce(fnCtx, roomId)
+        const alive = players.filter((p) => !p.folded)
+        const missing = alive.some((p) => (handMap.get(p.openid) || []).length !== 2)
+        if (missing) return { ok: false, code: 'INTERNAL', error: '底牌缺失,无法摊牌' }
+
+        const evals = alive.map((p) => {
+          const seven = handMap.get(p.openid).concat(newCommunity)
+          return { p: p, best: bestOf(seven) }
+        })
+        let top = evals[0].best
+        evals.forEach((e) => {
+          if (cmpScore(e.best.score, top.score) > 0) top = e.best
+        })
+        const winners = evals.filter((e) => cmpScore(e.best.score, top.score) === 0)
+
+        // 单池分池:平分,余数按「庄家左侧起环序」逐一补给(朋友局单池,P5 再补边池)
+        const potAtEnd = room.pot
+        const share = Math.floor(potAtEnd / winners.length)
+        let rem = potAtEnd - share * winners.length
+        const orderKey = (seat) =>
+          (seats.indexOf(seat) - seats.indexOf(room.dealerSeat) + n) % n
+        winners.sort((a, b) => orderKey(a.p.seat) - orderKey(b.p.seat))
+
+        const winMap = {}
+        winners.forEach((w) => {
+          const amt = share + (rem > 0 ? 1 : 0)
+          if (rem > 0) rem--
+          winMap[w.p.openid] = amt
+          // 分池不冲抵欠款(定版变更 §10.3):自动还款取消,
+          // 否则借款随赢随清就失去意义;欠款由手动 repay / 游戏结束强制结清
+          w.p.chips += amt
+        })
+
+        // 开牌(用户定版):摊牌时所有未弃牌玩家的底牌全部写回公开 revealedHands,
+        // 各自带评出的牌型文案;已弃牌者仍默认不亮、可自亮(§6.5)
+        const handTextByOpenid = {}
+        evals.forEach((e) => (handTextByOpenid[e.p.openid] = e.best.text))
+        const revealedList = (room.revealedHands || []).slice()
+        alive.forEach((p) => {
+          if (!revealedList.some((r) => r.openid === p.openid)) {
+            revealedList.push({
+              openid: p.openid,
+              nick: p.nick || '玩家',
+              holeCards: handMap.get(p.openid),
+              handNo: room.handNo,
+              hand: handTextByOpenid[p.openid] || ''
+            })
+          }
+        })
+        room.revealedHands = revealedList
+
+        // 结果行:按庄家左侧环序列出每个未弃牌者的牌型,赢家行附分池金额
+        const lines = evals
+          .slice()
+          .sort((a, b) => orderKey(a.p.seat) - orderKey(b.p.seat))
+          .map((e) => {
+            const base =
+              (e.p.nick || '玩家') + ':「' + e.best.text + '」'
+            if (winners.indexOf(e) === -1) return base
+            return (
+              base +
+              ' ' +
+              (winners.length > 1 ? '平分底池 ' : '赢得底池 ') + winMap[e.p.openid] +
+              (winners.length > 1 ? '/' + potAtEnd : '')
+            )
+          })
+        finishHand(winMap, potAtEnd, newCommunity, lines, lines.join(';'))
+        updateData.revealedHands = revealedList
+        handWinners = winners.map((w) => ({
+          openid: w.p.openid,
+          nick: w.p.nick || '',
+          hand: w.best.text,
+          potShare: winMap[w.p.openid]
+        }))
       } else {
         const nextStreet = NEXT_STREET[street]
         newCommunity = newCommunity.concat(
-          await dealCards(roomId, community, STREET_CARDS[nextStreet])
+          await dealCards(fnCtx, roomId, community, STREET_CARDS[nextStreet])
         )
         // postflop 首个行动者:庄家之后第一个未 fold 未 allIn 者
         // (单挑时庄家=SB,postflop 由 BB 先动;excludeSelf 但循环兜底仍可指回庄家)
         const firstActor = nextActorFrom(room.dealerSeat, true)
+
+        players.forEach((p) => {
+          p.bet = 0 // 已入池
+          p.acted = false
+        })
         updateData.status = nextStreet
         updateData.turnSeat = firstActor ? firstActor.seat : -1
+        updateData.bettingRound = nextStreet
+        updateData.communityCards = newCommunity
+        updateData.pot = room.pot
+        updateData.currentBet = 0
+        updateData.minRaise = bb
+        updateData.players = players
+        updateData.log = (room.log || []).slice(-LOG_LIMIT).concat([
+          { ts: Date.now(), openid, type: 'action', text: logText },
+          { ts: Date.now(), openid, type: 'street', text: '进入 ' + nextStreet }
+        ])
       }
-
-      players.forEach((p) => {
-        p.bet = 0 // 已入池
-        p.acted = false
-      })
-      updateData.bettingRound = updateData.status
-      updateData.communityCards = newCommunity
-      updateData.pot = room.pot
-      updateData.currentBet = 0
-      updateData.minRaise = bb
-      updateData.players = players
-      updateData.log = (room.log || []).concat([
-        { ts: Date.now(), openid, type: 'action', text: logText },
-        { ts: Date.now(), openid, type: 'street', text: '进入 ' + updateData.status }
-      ])
     } else {
       // 本轮继续:turnSeat 移到下一个可行动座位
       const nxt = nextActorFrom(me.seat, true)
@@ -229,21 +529,32 @@ exports.main = async (event) => {
       updateData.pot = room.pot
       updateData.currentBet = room.currentBet
       updateData.minRaise = room.minRaise
-      updateData.log = (room.log || []).concat([
+      updateData.log = (room.log || []).slice(-LOG_LIMIT).concat([
         { ts: Date.now(), openid, type: 'action', text: logText }
       ])
     }
   }
 
-  // —— CAS 更新(§13)——
-  const upd = await ROOMS.where({ _id: roomId, version }).update({ data: updateData })
+  // —— CAS 更新(§13):where 条件含 version,更新同时递增 version 防并发/重放 ——
+  const upd = await ROOMS.where({ _id: roomId, version }).update({
+    data: Object.assign({ version: _.inc(1) }, updateData)
+  })
   if (!upd.stats || upd.stats.updated === 0) {
     return { ok: false, code: 'CAS_FAIL', error: '状态冲突,请稍候刷新重试' }
+  }
+
+  // —— 手终流水落库(CAS 成功后才写,失败不影响房间状态)——
+  if (historyDoc) {
+    historyDoc.winners = handWinners
+    await HANDHISTORY.add({ data: historyDoc }).catch((e) =>
+      console.error('handHistory write failed', e)
+    )
   }
 
   return {
     ok: true,
     status: updateData.status || room.status,
-    turnSeat: updateData.turnSeat !== undefined ? updateData.turnSeat : room.turnSeat
+    turnSeat: updateData.turnSeat !== undefined ? updateData.turnSeat : room.turnSeat,
+    winners: handWinners
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "action",
   "version": "1.0.0",
-  "description": "P3 下注:fold/check/call/raise/allIn 校验、盲注轮转推进、发公共牌",
+  "description": "P3 下注 + P4 摊牌结算:动作校验、街推进、内置评牌分池、handHistory/lastHandSnapshot 落库",
   "main": "index.js",
   "dependencies": {
     "wx-server-sdk": "~2.6.3"

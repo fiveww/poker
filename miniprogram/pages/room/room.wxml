@@ -89,10 +89,9 @@
         <view class="muted center-text act-hint">{{actionBar.canCheck ? '无人加注,可看牌把行动传给下家' : '面前有下注:只能跟注 / 加注 / 弃牌'}}</view>
       </block>
 
-      <!-- 非本人行动 / 手结束等状态提示 -->
+      <!-- 非本人行动提示(摊牌已在 action 内原子结算并回大厅,P4)-->
       <block wx:else>
-        <view wx:if="{{playing && room.status === 'showdown'}}" class="muted center-text">摊牌中 — 结算将在 P4 上线,届时自动分池并回到大厅</view>
-        <view wx:elif="{{playing && room.turnSeat !== -1}}" class="muted center-text">等待 {{turnName}} 行动…</view>
+        <view wx:if="{{playing && room.turnSeat !== -1}}" class="muted center-text">等待 {{turnName}} 行动…</view>
       </block>
     </view>
   </block>
@@ -109,6 +108,21 @@
       <text class="muted">盲注 {{room.config.sb}} / {{room.config.bb}}</text>
       <text class="muted">初始 {{room.config.initialChips}}</text>
       <text class="muted">{{room.config.loan.enabled ? '借款开' : '借款关'}}</text>
+    </view>
+
+    <!-- ======== P4 上局结果面板(waiting 态展示,startHand 时清空)======== -->
+    <view wx:if="{{lastResultView}}" class="last-result">
+      <view class="lr-title">{{lastResultView.title}} · 底池 {{lastResultView.potTotal}}</view>
+      <view class="community">
+        <card wx:for="{{lastResultView.communitySlots}}" wx:key="index" wx:for-item="c" size="sm" card="{{c}}" />
+      </view>
+      <view wx:for="{{lastResultView.lines}}" wx:key="index" class="lr-line">{{item}}</view>
+      <view wx:for="{{lastResultView.reveals}}" wx:key="openid" class="lr-reveal">
+        <text class="lr-nick">{{item.nick}}{{item.hand ? ' · ' + item.hand : ''}}</text>
+        <view class="s-cards">
+          <card wx:for="{{item.cards}}" wx:key="index" wx:for-item="c2" size="sm" card="{{c2}}" />
+        </view>
+      </view>
     </view>
 
     <view class="players">
