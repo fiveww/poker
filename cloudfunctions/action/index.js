@@ -5,7 +5,8 @@
 // river 结束或可行动玩家 <2 → 发满 5 张后在 action 内原子完成摊牌结算(P4,§6.4):
 // 内置评牌器选 7 选 5 判型 → **边池分层分配**(P5,§11:按 totalBet 升序切层,
 // all-in 短码者只赢等额池层;平分余数按庄家左侧顺序补给,不冲抵欠款 §10.3)
-// → 未弃牌者底牌全亮写回 revealedHands → 写 lastHandSnapshot(投票回退点,§9.1)→ 回 waiting。
+// → 未弃牌者底牌全亮、手中途的私有「结算后亮牌」标记一并并入公开结果
+//   (§6.5 新规则:主动秀牌统一只在结算后展示)→ 写 lastHandSnapshot(投票回退点,§9.1)→ 回 waiting。
 // 只剩 1 人未 fold → 直接获胜(muck 不进摊牌,默认不亮牌,§6.5),同样落快照与流水。
 // 每种手终都写一条 handHistory(未主动亮牌者不落底牌,§4.3 隐私约定)+ lastResult 结果面板数据。
 // 房主代弃牌(forOpenid):把离线玩家标记弃牌推进桌面,完整复用 fold 的轮次推进/
@@ -115,13 +116,22 @@ function bestOf(cards) {
 
 // ==================== 共用小工具 ====================
 
-// 本房间全部私有底牌 Map(openid → holeCards),按请求缓存(ctx):
-// 同一次调用里「发补牌排除」和「摊牌评牌」共用这一次查询,减少串行库操作防超时。
+// 本房间全部私有底牌 Map(openid → {cards, show}),按请求缓存(ctx):
+// 同一次调用里「发补牌排除」「摊牌评牌」「亮牌标记」共用这一次查询,减少串行库操作防超时。
+// show = 本手进行中玩家点过「结算后亮牌」(revealCards 写在私有 hands 文档上的意愿标记)
 function loadHandMapOnce(ctx, roomId) {
   if (!ctx.handMapPromise) {
     ctx.handMapPromise = HANDS.where({ roomId })
       .get()
-      .then((res) => new Map(res.data.map((d) => [d.ownerOpenid, d.holeCards || []])))
+      .then(
+        (res) =>
+          new Map(
+            res.data.map((d) => [
+              d.ownerOpenid,
+              { cards: d.holeCards || [], show: !!d.showAfterSettle }
+            ])
+          )
+      )
       .catch(() => new Map())
   }
   return ctx.handMapPromise
@@ -132,7 +142,7 @@ async function dealCards(ctx, roomId, community, n) {
   const used = new Set()
   ;(community || []).forEach((c) => used.add(c))
   const handMap = await loadHandMapOnce(ctx, roomId)
-  handMap.forEach((cards) => cards.forEach((c) => used.add(c)))
+  handMap.forEach((h) => h.cards.forEach((c) => used.add(c)))
   const deck = []
   for (const s of SUITS) for (const r of RANKS) if (!used.has(r + s)) deck.push(r + s)
   const out = []
@@ -334,14 +344,15 @@ async function doAction(event) {
   let sidePotDocs = [] // P5:本手各池(主池/边池)明细,落 handHistory.sidePots
 
   // —— 结算通用收尾(§6.3.6 / §6.4 第 7~8 步):清桌、快照、结果面板、日志 ——
-  // chips 此刻必须已是派池后状态;totalWinByOpenid 用于记每手盈亏 delta
-  const finishHand = (totalWinByOpenid, potTotal, communityNow, lines, logTextHand) => {
+  // chips 此刻必须已是派池后状态;totalWinByOpenid 用于记每手盈亏 delta;
+  // revealedNow = 本手最终对外公开的底牌清单(主动秀牌统一此刻才并入,§6.5 新规则)
+  const finishHand = (totalWinByOpenid, potTotal, communityNow, lines, logTextHand, revealedNow) => {
     players.forEach((p) => {
       p.bet = 0
       p.acted = false
     })
     const now = Date.now()
-    const revealedList = (room.revealedHands || []).slice()
+    const revealedList = revealedNow || []
     updateData.status = 'waiting'
     updateData.bettingRound = ''
     updateData.pot = 0
@@ -397,6 +408,7 @@ async function doAction(event) {
       })),
       ts: now
     })
+    updateData.revealedHands = revealedList // startHand 时清空
     updateData.log = (room.log || []).slice(-LOG_LIMIT).concat([
       { ts: now, openid, type: 'action', text: logText },
       { ts: now, openid, type: 'hand', text: logTextHand }
@@ -414,6 +426,18 @@ async function doAction(event) {
     const need = 5 - communityNow.length
     const fullBoard =
       need > 0 ? communityNow.concat(await dealCards(fnCtx, roomId, communityNow, need)) : communityNow.slice()
+    // 赢家默认 muck(§6.5);本手进行中请求过「结算后亮牌」的玩家(赢家自己/已弃牌者)
+    // 此刻才统一并入公开结果 —— 手中途不进公开文档,防绕过 UI 偷看
+    const handMapFold = await loadHandMapOnce(fnCtx, roomId) // 与 dealCards 共用缓存查询
+    const revealedList = players
+      .filter((p) => (handMapFold.get(p.openid) || {}).show)
+      .map((p) => ({
+        openid: p.openid,
+        nick: p.nick || '玩家',
+        holeCards: handMapFold.get(p.openid).cards || [],
+        handNo: room.handNo,
+        hand: ''
+      }))
     const line =
       (winner.nick || '玩家') + ' 独赢底池 ' + potAtEnd + '(其余人弃牌)'
     finishHand(
@@ -421,7 +445,8 @@ async function doAction(event) {
       potAtEnd,
       fullBoard,
       [line],
-      line
+      line,
+      revealedList
     )
     handWinners = [
       { openid: winner.openid, nick: winner.nick || '', hand: '', potShare: potAtEnd }
@@ -451,11 +476,11 @@ async function doAction(event) {
         // 评牌 → 按 totalBet 升序切层建主池/边池 → 逐池分配 → 回 waiting ——
         const handMap = await loadHandMapOnce(fnCtx, roomId)
         const alive = players.filter((p) => !p.folded)
-        const missing = alive.some((p) => (handMap.get(p.openid) || []).length !== 2)
+        const missing = alive.some((p) => ((handMap.get(p.openid) || {}).cards || []).length !== 2)
         if (missing) return { ok: false, code: 'INTERNAL', error: '底牌缺失,无法摊牌' }
 
         const evals = alive.map((p) => {
-          const seven = handMap.get(p.openid).concat(newCommunity)
+          const seven = handMap.get(p.openid).cards.concat(newCommunity)
           return { p: p, best: bestOf(seven) }
         })
 
@@ -537,23 +562,29 @@ async function doAction(event) {
           })
         })
 
-        // 开牌(用户定版):摊牌时所有未弃牌玩家的底牌全部写回公开 revealedHands,
-        // 各自带评出的牌型文案;已弃牌者仍默认不亮、可自亮(§6.5)
+        // 开牌(§6.5 新规则):摊牌时所有未弃牌玩家的底牌自动亮出并附牌型文案;
+        // 手中途请求的主动秀牌(含已弃牌者的「弃牌秀牌」)此刻才一并并入公开结果。
+        // 手进行期间只存在私有 hands 文档上的标记,公开文档无任何底牌信息。
         const handTextByOpenid = {}
         evals.forEach((e) => (handTextByOpenid[e.p.openid] = e.best.text))
-        const revealedList = (room.revealedHands || []).slice()
-        alive.forEach((p) => {
-          if (!revealedList.some((r) => r.openid === p.openid)) {
-            revealedList.push({
-              openid: p.openid,
-              nick: p.nick || '玩家',
-              holeCards: handMap.get(p.openid),
-              handNo: room.handNo,
-              hand: handTextByOpenid[p.openid] || ''
-            })
-          }
+        const revealedList = evals.map((e) => ({
+          openid: e.p.openid,
+          nick: e.p.nick || '玩家',
+          holeCards: handMap.get(e.p.openid).cards,
+          handNo: room.handNo,
+          hand: e.best.text
+        }))
+        players.forEach((p) => {
+          const mine = handMap.get(p.openid)
+          if (!p.folded || !mine || !mine.show) return
+          revealedList.push({
+            openid: p.openid,
+            nick: p.nick || '玩家',
+            holeCards: mine.cards || [],
+            handNo: room.handNo,
+            hand: ''
+          })
         })
-        room.revealedHands = revealedList
 
         // 结果行:先列各池归属(P5),再按庄家左侧环序列出每人牌型与赢得合计
         const lines = []
@@ -566,8 +597,7 @@ async function doAction(event) {
             const won = winMap[e.p.openid] || 0
             lines.push(won > 0 ? base + ' 赢得 ' + won : base)
           })
-        finishHand(winMap, potAtEnd, newCommunity, lines, lines.join(';'))
-        updateData.revealedHands = revealedList
+        finishHand(winMap, potAtEnd, newCommunity, lines, lines.join(';'), revealedList)
         handWinners = Object.values(aggByOpenid).map((aw) => ({
           openid: aw.openid,
           nick: aw.nick,

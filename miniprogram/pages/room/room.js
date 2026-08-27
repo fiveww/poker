@@ -603,13 +603,17 @@ Page({
 
   // ======== P9 牌局记录入口 ========
 
-  // 主动亮底牌(§6.5):当前手结束后想晒牌时点一下
+  // 主动亮底牌(§6.5 新规则:统一只在结算后展示)
+  // 牌局进行中点按 = 登记意愿(私密),手终结算时并入公开结果;
+  // 结算后(waiting)点按 = 立即补进上局结果面板
   onReveal() {
-    actions.revealCards(this.data.roomId).then((r) => {
-      if (r.already) wx.showToast({ title: '你已亮过牌', icon: 'none' })
-    }).catch((e) =>
-      wx.showToast({ title: e.message || '亮牌失败', icon: 'none' })
-    )
+    actions.revealCards(this.data.roomId)
+      .then((r) => {
+        if (r.deferred) wx.showToast({ title: '已登记,本手结束后公开展示', icon: 'none' })
+        else if (r.already) wx.showToast({ title: '你已亮过牌', icon: 'none' })
+        else wx.showToast({ title: '已亮出,展示在上局结果里', icon: 'none' })
+      })
+      .catch((e) => wx.showToast({ title: e.message || '亮牌失败', icon: 'none' }))
   },
 
   onOpenRecords() {

@@ -133,10 +133,10 @@
         <view wx:if="{{room.turnSeat !== -1}}" class="muted center-text">等待 {{turnName}} 行动…</view>
       </block>
 
-      <!-- P8 发起结束投票 + §6.5 主动亮牌(轮到自己行动时收起,避免行动区被顶出屏幕)-->
+      <!-- P8 发起结束投票 + §6.5 主动亮牌(轮到自己行动时收起;亮牌统一在结算后展示)-->
       <view class="tool-row" wx:if="{{!actionBar.myTurn}}">
         <button class="btn btn-ghost mini-btn" size="mini" bindtap="onProposeEnd">提议结束本局</button>
-        <button class="btn btn-ghost mini-btn" size="mini" bindtap="onReveal">亮牌</button>
+        <button class="btn btn-ghost mini-btn" size="mini" bindtap="onReveal">结算后亮牌</button>
         <button class="btn btn-ghost mini-btn" size="mini" bindtap="onOpenRecords">牌局记录</button>
       </view>
 
