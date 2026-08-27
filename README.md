@@ -15,8 +15,10 @@ myownproject/
     pages/index/                # 首页:登录态 + 房间入口(支持分享带入 roomCode)
     pages/create/               # P1 建房配置:盲注/筹码/借款(借款默认关)
     pages/room/                 # P1 房间页:watch rooms、玩家列表、分享、离座
+    pages/history/              # 历史对局:本机曾加入房间列表,一键重新加入(失效自动清理)
     services/cloud.js           # callFunction 封装
     services/actions.js         # createRoom/joinRoom/leaveRoom/startHand
+    services/history.js         # 本地房间历史(wx storage,LRU 上限 20)
     components/card/            # P2 扑克牌组件(正面/背面/空位,纯 CSS 无图片)
   cloudfunctions/
     login/                      # 返回 openid,登记 users

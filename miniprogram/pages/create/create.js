@@ -1,5 +1,6 @@
 const app = getApp()
 const actions = require('../../services/actions.js')
+const history = require('../../services/history.js')
 
 Page({
   data: {
@@ -66,6 +67,7 @@ Page({
     wx.showLoading({ title: '创建中…', mask: true })
     try {
       const res = await actions.createRoom(cfg, nick)
+      history.add(res.roomId, res.roomCode) // 记入本地历史,供首页「历史对局」快速回房
       wx.hideLoading()
       wx.redirectTo({ url: '/pages/room/room?roomId=' + res.roomId + '&roomCode=' + res.roomCode })
     } catch (e) {

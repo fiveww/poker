@@ -1,0 +1,17 @@
+<view class="container">
+  <view class="muted tip">点击房间号直接重新加入 · 长按删除单条</view>
+
+  <view wx:for="{{items}}" wx:key="roomId" class="room-row"
+        data-id="{{item.roomId}}" data-code="{{item.roomCode}}"
+        bindtap="onTapRoom" bindlongpress="onLongPress">
+    <view class="r-main">
+      <view class="r-code">{{item.roomCode}}</view>
+      <view class="muted r-time">{{item.timeText}}</view>
+    </view>
+    <view class="r-join">加入 ›</view>
+  </view>
+
+  <view wx:if="{{!items.length}}" class="muted empty">暂无历史记录,创建或加入一局后显示在这里</view>
+
+  <button wx:if="{{items.length}}" class="btn btn-ghost danger clear-btn" bindtap="onClearAll">清空历史</button>
+</view>

@@ -21,7 +21,8 @@
     <input class="input" placeholder="输入房间号" maxlength="8"
            value="{{roomCode}}" bindinput="onInputRoomCode" />
     <button class="btn btn-ghost" bindtap="onJoinRoom">加入房间</button>
+    <button class="btn btn-ghost history-btn" bindtap="onOpenHistory">历史对局</button>
   </view>
 
-  <view class="muted footer">P1 房间:创建/加入/离开 + 实时同步。发牌在 P2 接入。</view>
+  <view class="muted footer">房间:创建/加入/离开 + 实时同步;发牌与盲注已上线,下注动作在 P3 接入。</view>
 </view>

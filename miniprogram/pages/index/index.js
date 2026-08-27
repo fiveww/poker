@@ -1,5 +1,6 @@
 const app = getApp()
 const actions = require('../../services/actions.js')
+const history = require('../../services/history.js')
 
 Page({
   data: {
@@ -47,11 +48,16 @@ Page({
     wx.showLoading({ title: '加入中…', mask: true })
     try {
       const res = await actions.joinRoom(code, this.data.nick)
+      history.add(res.roomId, code) // 记入本地历史
       wx.hideLoading()
       wx.redirectTo({ url: '/pages/room/room?roomId=' + res.roomId + '&roomCode=' + code })
     } catch (e) {
       wx.hideLoading()
       wx.showToast({ title: e.message || '加入失败', icon: 'none' })
     }
+  },
+
+  onOpenHistory() {
+    wx.navigateTo({ url: '/pages/history/history' })
   }
 })

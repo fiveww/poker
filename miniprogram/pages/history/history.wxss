@@ -1,0 +1,33 @@
+.tip {
+  text-align: center;
+  margin-bottom: 32rpx;
+}
+
+.room-row {
+  background: #16401f;
+  border: 2rpx solid #2c5a36;
+  border-radius: 16rpx;
+  padding: 28rpx 32rpx;
+  margin-bottom: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.r-main { display: flex; flex-direction: column; gap: 6rpx; }
+.r-code {
+  color: #e6c34d;
+  font-size: 40rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+}
+.r-time { font-size: 22rpx; }
+.r-join { color: #9bb0a3; font-size: 26rpx; }
+
+.empty {
+  text-align: center;
+  margin-top: 120rpx;
+  line-height: 1.8;
+}
+
+.clear-btn { margin-top: 48rpx; }
+.danger { border-color: #c04040; color: #c04040; }
