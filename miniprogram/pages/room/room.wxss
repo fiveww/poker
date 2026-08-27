@@ -49,7 +49,13 @@
   border-bottom: 2rpx solid #2c5a36;
 }
 .player:last-child { border-bottom: 0; }
-.p-name { flex: 1; display: flex; align-items: center; gap: 12rpx; }
+.p-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap; /* 房主/你/离线 多标签时不把筹码列挤出 */
+}
 .p-chips { color: #e6c34d; font-weight: 600; }
 .tag {
   font-size: 20rpx;
@@ -108,10 +114,15 @@
 .seat.turn { border-color: #e6c34d; }
 .seat.folded { opacity: 0.45; }
 .seat-l { display: flex; flex-direction: column; gap: 8rpx; min-width: 0; }
-.seat-top { display: flex; align-items: center; gap: 10rpx; }
+.seat-top {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-wrap: wrap; /* 昵称+离线+D+盲注标签可能超一行,换行而非溢出压到右侧牌区 */
+}
 .s-name {
   font-size: 26rpx;
-  max-width: 240rpx;
+  max-width: 180rpx;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -251,6 +262,7 @@
   display: flex;
   gap: 12rpx;
   align-items: center;
+  flex-wrap: wrap; /* 窄屏时数值换行,不横向溢出卡片 */
   color: #9bb0a3;
   font-size: 26rpx;
 }
@@ -261,6 +273,10 @@
   align-items: center;
   min-height: 56rpx;
 }
+.debt-line { font-size: 24rpx; line-height: 1.4; }
+
+/* 大厅(waiting)态的投票条:与前序内容留出间距 */
+.vote-dock { margin-top: 24rpx; }
 .gold { color: #e6c34d; }
 .red { color: #d06b6b; }
 .neg { color: #d06b6b; }
