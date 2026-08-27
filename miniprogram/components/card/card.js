@@ -23,7 +23,8 @@ Component({
         return
       }
       const isRed = m[2] === 'h' || m[2] === 'd'
-      const suitMap = { s: '♠', h: '♥', d: '♦', c: '♣' }
+      // ︎:文本样式变体选择符,强制花色按文本(而非 emoji 彩色样式)渲染,黑桃/梅花才清晰
+      const suitMap = { s: '♠︎', h: '♥︎', d: '♦︎', c: '♣︎' }
       this.setData({ faceUp: true, empty: false, rank: m[1], suitChar: suitMap[m[2]], red: isRed })
     }
   }

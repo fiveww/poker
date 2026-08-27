@@ -22,7 +22,12 @@
   color: #1a1a1a;
   line-height: 1;
 }
-.card.front .suit { line-height: 1; }
+/* 黑花色:纯黑加粗,防止浅灰看不清 */
+.card.front .suit {
+  line-height: 1;
+  font-weight: 700;
+  color: #000;
+}
 
 .card.sm .rank { font-size: 28rpx; }
 .card.sm .suit { font-size: 24rpx; }
