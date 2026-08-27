@@ -3,7 +3,16 @@ const actions = require('../../services/actions.js')
 const { cloudEnvId, collections } = require('../../config.js')
 
 // 牌局进行中的状态集合(区别于 waiting 大厅 / closed 结束)
-const PLAYING_STATES = ['preflop', 'flop', 'turn', 'river', 'showdown']
+const PLAYING_STATES = ['dealing', 'preflop', 'flop', 'turn', 'river', 'showdown']
+
+const STATUS_LABELS = {
+  dealing: '发牌中',
+  preflop: '翻牌前',
+  flop: '翻牌圈',
+  turn: '转牌圈',
+  river: '河牌圈',
+  showdown: '摊牌'
+}
 
 Page({
   data: {
@@ -15,7 +24,9 @@ Page({
     // —— P2 牌桌视图 ——
     playing: false, // 是否处于一手牌中
     myHoleCards: [], // 本人底牌 ['As','Kd'],空数组 = 未发到/未拉取
+    seated: [], // 全体玩家展示列表(含 name/isMe 等,大厅与牌桌共用)
     opponents: [], // 其他玩家展示列表
+    myPlayer: null,
     communitySlots: ['', '', '', '', ''] // 公共牌 5 格('' = 空位)
   },
 
@@ -30,7 +41,7 @@ Page({
       setTimeout(() => wx.navigateBack(), 800)
       return
     }
-    this._handNoFetched = null // 已拉取底牌的手号,防重复拉
+    this._lastHandNoFetched = null
     this.openWatcher()
   },
 
@@ -73,7 +84,7 @@ Page({
   },
 
   // 本人 hands 文档的 watch(P2):正常情况实时收到底牌;
-  // 云函数管理员写库推送不可靠时由 fetchMyHand 轮询兜底。
+  // 云函数管理员写库推送不可靠时由 fetchMyHand 拉取兜底。
   openHandsWatcher() {
     if (this.handsWatcher || !app.globalData.openid) return
     const db = wx.cloud.database()
@@ -97,7 +108,7 @@ Page({
   },
 
   applyMyHand(doc) {
-    if (!doc || doc.handNo !== this._handNoFetched) return // 只认当前手
+    if (!doc || doc.handNo !== this._lastHandNoFetched) return // 只认当前手
     this.setData({ myHoleCards: doc.holeCards || [] })
   },
 
@@ -111,7 +122,7 @@ Page({
         .limit(1)
         .get()
       if (res.data && res.data.length && res.data[0].handNo === handNo) {
-        this._handNoFetched = handNo
+        this._lastHandNoFetched = handNo
         this.setData({ myHoleCards: res.data[0].holeCards || [] })
         this.openHandsWatcher()
       }
@@ -134,26 +145,18 @@ Page({
     ])
     if (sig === this._lastSig) return
     this._lastSig = sig
-    const openid = app.globalData.openid
+    const openid = this.data.openid
     const playing = PLAYING_STATES.indexOf(room.status) !== -1
 
     // 手号变化 → 清空旧底牌并重新拉取
-    if (this._lastHandNo !== undefined && this._lastHandNo !== room.handNo) {
+    if (this._seenHandNo !== undefined && this._seenHandNo !== room.handNo) {
       this.setData({ myHoleCards: [] })
-      this._handNoFetched = null
+      this._lastHandNoFetched = null
       this.closeHandsWatcher()
     }
-    this._lastHandNo = room.handNo
+    this._seenHandNo = room.handNo
 
     // 预计算展示字段(WXML 不能调 page 方法)
-    const STATUS_LABELS = {
-      dealing: '发牌中',
-      preflop: '翻牌前',
-      flop: '翻牌圈',
-      turn: '转牌圈',
-      river: '河牌圈',
-      showdown: '摊牌'
-    }
     const players = (room.players || []).map((p) => ({
       ...p,
       name: p.nick || '玩家' + ((p.seat !== undefined ? p.seat : 0) + 1),
@@ -162,26 +165,25 @@ Page({
       isMe: p.openid === openid
     }))
     const opponents = players.filter((p) => !p.isMe)
-    const myPlayer = players.find((p) => p.isMe)
+    const myPlayer = players.find((p) => p.isMe) || null
 
     const community = room.communityCards || []
     const communitySlots = [0, 1, 2, 3, 4].map((i) => community[i] || '')
 
     this.setData({
       room,
-      openid,
-      isHost: room.hostOpenid === openid,
+      isHost: !!openid && room.hostOpenid === openid,
       watcherReady: true,
       playing,
+      seated: players,
       opponents,
       myPlayer,
-      nickname: (myPlayer && myPlayer.name) || '',
       statusLabel: STATUS_LABELS[room.status] || '',
       communitySlots
     })
 
     // 进入一手牌 → 拉自己的底牌;回到 waiting(手结束)→ 清空
-    if (playing && this._handNoFetched !== room.handNo) {
+    if (playing && this._lastHandNoFetched !== room.handNo && openid) {
       this.fetchMyHand(room.handNo)
     }
   },
@@ -226,6 +228,11 @@ Page({
 
   // 房主开一手(P2):调 startHand,结果经 rooms watch 广播回来
   async onStart() {
+    const room = this.data.room
+    if (!room || (room.players || []).length < 2) {
+      wx.showToast({ title: '至少 2 人才能开局', icon: 'none' })
+      return
+    }
     if (this._starting) return
     this._starting = true
     try {

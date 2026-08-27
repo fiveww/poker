@@ -1,4 +1,4 @@
 {
-  "read": "auth.uid != null",
+  "read": "auth.openid != null",
   "write": false
 }

@@ -76,23 +76,29 @@
   margin-bottom: 32rpx;
 }
 
-/* 对手席位 */
+/* 对手席位:左右两栏,避免换行错位 */
 .seat {
   width: 100%;
   box-sizing: border-box;
   background: #0e2a18;
   border: 2rpx solid #2c5a36;
   border-radius: 16rpx;
-  padding: 16rpx 20rpx;
+  padding: 18rpx 22rpx;
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  gap: 12rpx;
 }
 .seat.turn { border-color: #e6c34d; }
 .seat.folded { opacity: 0.45; }
-.seat-top { display: flex; align-items: center; gap: 10rpx; min-width: 160rpx; }
-.s-name { font-size: 26rpx; }
+.seat-l { display: flex; flex-direction: column; gap: 8rpx; min-width: 0; }
+.seat-top { display: flex; align-items: center; gap: 10rpx; }
+.s-name {
+  font-size: 26rpx;
+  max-width: 240rpx;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .chip-btn {
   width: 36rpx;
   height: 36rpx;
@@ -104,8 +110,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
-.s-chips { color: #9bb0a3; font-size: 24rpx; margin-right: auto; }
+.s-chips { color: #9bb0a3; font-size: 24rpx; }
+.seat-r { display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; }
 .s-cards { display: flex; gap: 8rpx; align-items: center; }
 .s-folded { color: #9bb0a3; font-size: 24rpx; }
 .s-bet {
@@ -128,8 +136,12 @@
   border-radius: 16rpx;
   padding: 24rpx;
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 28rpx;
 }
 .me-cards { display: flex; gap: 16rpx; }
-.me-info { display: flex; flex-wrap: wrap; align-items: center; gap: 14rpx; }
+.me-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 10rpx; }
+.me-name { display: flex; align-items: center; gap: 12rpx; font-size: 28rpx; }
+.me-chips { color: #e6c34d; font-size: 32rpx; font-weight: 700; }
+.danger { border-color: #c04040; color: #c04040; }
+.center-text { text-align: center; line-height: 1.6; }

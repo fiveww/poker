@@ -1,4 +1,4 @@
 {
-  "read": "auth.uid == doc.ownerOpenid",
+  "read": "auth.openid == doc.ownerOpenid",
   "write": false
 }
