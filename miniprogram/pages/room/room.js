@@ -82,7 +82,7 @@ Page({
     const room = this.data.room
     const code = (room && room.roomCode) || ''
     return {
-      title: '朋友局德扑 · 房间号 ' + code,
+      title: '德扑 · 房间号 ' + code,
       path: '/pages/index/index?roomCode=' + code
     }
   },
