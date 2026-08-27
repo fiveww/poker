@@ -1,0 +1,9 @@
+{
+  "name": "repay",
+  "version": "1.0.0",
+  "description": "P6 手动还款:chips 扣减、debt 冲抵、repaid 记账",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

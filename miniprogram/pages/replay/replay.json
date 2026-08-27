@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "牌局记录",
+  "usingComponents": {
+    "card": "/components/card/card"
+  }
+}

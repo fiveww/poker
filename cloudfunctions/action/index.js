@@ -1,12 +1,15 @@
-// action 云函数(P3 下注 + P4 摊牌结算)
+// action 云函数(P3 下注 + P4 摊牌结算 + P5 边池 + P7 房主代弃牌)
 // 玩家行动:fold/check/call/raise/allIn。CAS 校验 version(§13)→ 校验轮到本人 →
 // 动作合法性校验 → 更新 bet/chips/pot/currentBet/minRaise → 推进 turnSeat。
 // 本轮结束判定:所有可行动玩家(未 fold 未 allIn)已行动且下注相等 → 发下一街公共牌;
 // river 结束或可行动玩家 <2 → 发满 5 张后在 action 内原子完成摊牌结算(P4,§6.4):
-// 内置评牌器选 7 选 5 判型 → 单池分池(平分余数按庄家左侧顺序,不冲抵欠款 §10.3)
+// 内置评牌器选 7 选 5 判型 → **边池分层分配**(P5,§11:按 totalBet 升序切层,
+// all-in 短码者只赢等额池层;平分余数按庄家左侧顺序补给,不冲抵欠款 §10.3)
 // → 未弃牌者底牌全亮写回 revealedHands → 写 lastHandSnapshot(投票回退点,§9.1)→ 回 waiting。
 // 只剩 1 人未 fold → 直接获胜(muck 不进摊牌,默认不亮牌,§6.5),同样落快照与流水。
 // 每种手终都写一条 handHistory(未主动亮牌者不落底牌,§4.3 隐私约定)+ lastResult 结果面板数据。
+// 房主代弃牌(forOpenid):把离线玩家标记弃牌推进桌面,完整复用 fold 的轮次推进/
+// 补牌/摊牌路径(仅房主可用,目标须离线;§8 离线处理)。
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
@@ -214,10 +217,32 @@ async function doAction(event) {
     return { ok: false, code: 'NOT_BETTING', error: '当前不在下注阶段' }
   }
   const players = (room.players || []).map((p) => ({ ...p }))
-  const me = players.find((p) => p.openid === openid)
+  let me = players.find((p) => p.openid === openid)
   if (!me) return { ok: false, code: 'NOT_IN_ROOM', error: '你不在此房间' }
-  if (room.turnSeat !== me.seat) return { ok: false, code: 'NOT_YOUR_TURN', error: '还没轮到你' }
-  if (me.folded || me.allIn) return { ok: false, code: 'CANNOT_ACT', error: '你本手无需行动' }
+
+  // —— 房主代弃牌(§8 离线处理):event.forOpenid 指定目标玩家 ——
+  // 仅房主可用;目标须离线(!connected 或心跳超时)。改绑 me 后,
+  // fold 走下方完全相同的结算路径(轮次推进/补牌/摊牌/快照),无重复逻辑。
+  const OFFLINE_MS = 90 * 1000
+  if (event.forOpenid && event.forOpenid !== openid) {
+    if (room.hostOpenid !== openid) {
+      return { ok: false, code: 'FORBIDDEN', error: '仅房主可代为操作' }
+    }
+    const target = players.find((p) => p.openid === event.forOpenid)
+    if (!target) return { ok: false, code: 'NOT_IN_ROOM', error: '该玩家不在房间' }
+    const offline = !target.connected || Date.now() - (target.lastSeen || 0) > OFFLINE_MS
+    if (!offline) return { ok: false, code: 'TARGET_ONLINE', error: '对方在线,不能代为弃牌' }
+    me = target
+  }
+
+  const actorName =
+    event.forOpenid && event.forOpenid !== openid ? me.nick || '对方' : '你'
+  if (room.turnSeat !== me.seat) {
+    return { ok: false, code: 'NOT_YOUR_TURN', error: '还没轮到' + actorName }
+  }
+  if (me.folded || me.allIn) {
+    return { ok: false, code: 'CANNOT_ACT', error: actorName + ' 本手无需行动' }
+  }
 
   const bb = room.config.bb
   const seats = players.map((p) => p.seat).sort((a, b) => a - b)
@@ -239,7 +264,9 @@ async function doAction(event) {
   // —— 动作处理 ——
   if (act === 'fold') {
     me.folded = true
-    logText = (me.nick || '玩家') + ' 弃牌'
+    const forcedMark =
+      event.forOpenid && event.forOpenid !== openid ? '(房主代弃,已离线)' : ''
+    logText = (me.nick || '玩家') + ' 弃牌' + forcedMark
   } else if (act === 'check') {
     if (me.bet !== room.currentBet) {
       return { ok: false, code: 'CHECK_ILLEGAL', error: '有人下注,不能过牌' }
@@ -304,6 +331,7 @@ async function doAction(event) {
   // 手终产出(两种路径统一):开奖流水文档 + 赢家名单,须等 CAS 成功后再落库/返回
   let historyDoc = null
   let handWinners = []
+  let sidePotDocs = [] // P5:本手各池(主池/边池)明细,落 handHistory.sidePots
 
   // —— 结算通用收尾(§6.3.6 / §6.4 第 7~8 步):清桌、快照、结果面板、日志 ——
   // chips 此刻必须已是派池后状态;totalWinByOpenid 用于记每手盈亏 delta
@@ -419,7 +447,8 @@ async function doAction(event) {
           newCommunity = newCommunity.concat(await dealCards(fnCtx, roomId, community, need))
         }
 
-        // —— P4 摊牌结算(action 内原子完成,§6.4):评牌 → 单池分池 → 冲抵 → 回 waiting ——
+        // —— P5 边池摊牌结算(action 内原子完成,§6.4 + §11):
+        // 评牌 → 按 totalBet 升序切层建主池/边池 → 逐池分配 → 回 waiting ——
         const handMap = await loadHandMapOnce(fnCtx, roomId)
         const alive = players.filter((p) => !p.folded)
         const missing = alive.some((p) => (handMap.get(p.openid) || []).length !== 2)
@@ -429,28 +458,83 @@ async function doAction(event) {
           const seven = handMap.get(p.openid).concat(newCommunity)
           return { p: p, best: bestOf(seven) }
         })
-        let top = evals[0].best
-        evals.forEach((e) => {
-          if (cmpScore(e.best.score, top.score) > 0) top = e.best
-        })
-        const winners = evals.filter((e) => cmpScore(e.best.score, top.score) === 0)
 
-        // 单池分池:平分,余数按「庄家左侧起环序」逐一补给(朋友局单池,P5 再补边池)
         const potAtEnd = room.pot
-        const share = Math.floor(potAtEnd / winners.length)
-        let rem = potAtEnd - share * winners.length
+
+        // 边池切层(§11):以各未弃牌玩家的总投入为层界升序切层。
+        // 每层金额 = 全体玩家(含弃牌者,min 截断到层界)在该层的增量;
+        // 投入 ≥ 层界的未弃牌者才有资格争这一层 → all-in 短码者只赢等额部分。
+        const levels = [...new Set(alive.map((p) => p.totalBet || 0).filter((v) => v > 0))].sort(
+          (a, b) => a - b
+        )
+        let prevLevel = 0
+        const pots = []
+        levels.forEach((lv) => {
+          let amount = 0
+          players.forEach((p) => {
+            amount += Math.max(0, Math.min(p.totalBet || 0, lv) - prevLevel)
+          })
+          if (amount > 0) {
+            pots.push({
+              level: Number.isFinite(lv) ? lv : -1,
+              amount,
+              eligible: alive.filter((p) => (p.totalBet || 0) >= lv)
+            })
+          }
+          prevLevel = lv
+        })
+        // 防御性兜底:正常下注流程里切层总额必等于底池;若异常为空则退化为单池
+        if (!pots.length) {
+          pots.push({ level: -1, amount: potAtEnd, eligible: alive.slice() })
+        }
+
         const orderKey = (seat) =>
           (seats.indexOf(seat) - seats.indexOf(room.dealerSeat) + n) % n
-        winners.sort((a, b) => orderKey(a.p.seat) - orderKey(b.p.seat))
 
+        // 逐池分配:平分,余数按「庄家左侧起环序」逐一补给;
+        // 分池只加 chips 不冲抵欠款(定版变更 §10.3:自动还款取消,
+        // 欠款由手动 repay / 游戏结束强制结清)
         const winMap = {}
-        winners.forEach((w) => {
-          const amt = share + (rem > 0 ? 1 : 0)
-          if (rem > 0) rem--
-          winMap[w.p.openid] = amt
-          // 分池不冲抵欠款(定版变更 §10.3):自动还款取消,
-          // 否则借款随赢随清就失去意义;欠款由手动 repay / 游戏结束强制结清
-          w.p.chips += amt
+        const aggByOpenid = {}
+        sidePotDocs = []
+        pots.forEach((pot, pi) => {
+          let top = null
+          pot.eligible.forEach((pp) => {
+            const e = evals.find((ev) => ev.p.openid === pp.openid)
+            if (!top || cmpScore(e.best.score, top.score) > 0) top = e.best
+          })
+          const ws = pot.eligible
+            .map((pp) => evals.find((ev) => ev.p.openid === pp.openid))
+            .filter((e) => cmpScore(e.best.score, top.score) === 0)
+          ws.sort((a, b) => orderKey(a.p.seat) - orderKey(b.p.seat))
+          const share = Math.floor(pot.amount / ws.length)
+          let rem = pot.amount - share * ws.length
+          const winnerNames = []
+          ws.forEach((w) => {
+            const got = share + (rem > 0 ? 1 : 0)
+            if (rem > 0) rem--
+            w.p.chips += got
+            winMap[w.p.openid] = (winMap[w.p.openid] || 0) + got
+            if (!aggByOpenid[w.p.openid]) {
+              aggByOpenid[w.p.openid] = {
+                openid: w.p.openid,
+                nick: w.p.nick || '',
+                best: w.best,
+                share: 0
+              }
+            }
+            aggByOpenid[w.p.openid].share += got
+            winnerNames.push(w.p.nick || '')
+          })
+          sidePotDocs.push({
+            index: pi + 1,
+            level: pot.level,
+            amount: pot.amount,
+            winners: ws.map((w) => w.p.openid),
+            label:
+              (pi === 0 ? '主池' : '边池' + pi) + ' ' + pot.amount +
+              (winnerNames.length > 1 ? '(平分)' : '') + ' → ' + winnerNames.join('、')
+          })
         })
 
         // 开牌(用户定版):摊牌时所有未弃牌玩家的底牌全部写回公开 revealedHands,
@@ -471,28 +555,24 @@ async function doAction(event) {
         })
         room.revealedHands = revealedList
 
-        // 结果行:按庄家左侧环序列出每个未弃牌者的牌型,赢家行附分池金额
-        const lines = evals
+        // 结果行:先列各池归属(P5),再按庄家左侧环序列出每人牌型与赢得合计
+        const lines = []
+        sidePotDocs.forEach((sp) => lines.push(sp.label))
+        evals
           .slice()
           .sort((a, b) => orderKey(a.p.seat) - orderKey(b.p.seat))
-          .map((e) => {
-            const base =
-              (e.p.nick || '玩家') + ':「' + e.best.text + '」'
-            if (winners.indexOf(e) === -1) return base
-            return (
-              base +
-              ' ' +
-              (winners.length > 1 ? '平分底池 ' : '赢得底池 ') + winMap[e.p.openid] +
-              (winners.length > 1 ? '/' + potAtEnd : '')
-            )
+          .forEach((e) => {
+            const base = (e.p.nick || '玩家') + ':「' + e.best.text + '」'
+            const won = winMap[e.p.openid] || 0
+            lines.push(won > 0 ? base + ' 赢得 ' + won : base)
           })
         finishHand(winMap, potAtEnd, newCommunity, lines, lines.join(';'))
         updateData.revealedHands = revealedList
-        handWinners = winners.map((w) => ({
-          openid: w.p.openid,
-          nick: w.p.nick || '',
-          hand: w.best.text,
-          potShare: winMap[w.p.openid]
+        handWinners = Object.values(aggByOpenid).map((aw) => ({
+          openid: aw.openid,
+          nick: aw.nick,
+          hand: aw.best.text,
+          potShare: aw.share
         }))
       } else {
         const nextStreet = NEXT_STREET[street]
@@ -546,6 +626,7 @@ async function doAction(event) {
   // —— 手终流水落库(CAS 成功后才写,失败不影响房间状态)——
   if (historyDoc) {
     historyDoc.winners = handWinners
+    historyDoc.sidePots = sidePotDocs // P5:主池/边池明细
     await HANDHISTORY.add({ data: historyDoc }).catch((e) =>
       console.error('handHistory write failed', e)
     )

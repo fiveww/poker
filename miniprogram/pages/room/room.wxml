@@ -1,23 +1,58 @@
 <view class="container" wx:if="{{room}}">
+  <!-- ======== P8 整局已结束(closed)======== -->
+  <block wx:if="{{room.status === 'closed'}}">
+    <view class="code-bar">
+      <view class="code-label">房间</view>
+      <view class="code">{{room.roomCode}}</view>
+      <text class="muted">已结束</text>
+    </view>
+
+    <!-- 清算面板(复用上局结果面板结构,含强制还款后的最终余额)-->
+    <view wx:if="{{lastResultView}}" class="last-result">
+      <view class="lr-title">{{lastResultView.title}}</view>
+      <view wx:for="{{lastResultView.lines}}" wx:key="index" class="lr-line">{{item}}</view>
+    </view>
+
+    <view class="players">
+      <view class="players-title">最终筹码</view>
+      <view wx:for="{{seated}}" wx:key="openid" class="player">
+        <view class="p-name">
+          <text>{{item.name}}</text>
+          <text wx:if="{{item.openid === room.hostOpenid}}" class="tag">房主</text>
+          <text wx:if="{{item.isMe}}" class="tag me">你</text>
+        </view>
+        <view class="p-chips {{item.chips < 0 ? 'neg' : ''}}">{{item.chips}}</view>
+      </view>
+    </view>
+
+    <view class="bottom">
+      <button class="btn btn-primary" bindtap="onOpenRecords">牌局记录</button>
+      <button class="btn btn-ghost" bindtap="onExitClosed">返回首页</button>
+    </view>
+  </block>
+
   <!-- ======== 牌桌视图(一手进行中)======== -->
-  <block wx:if="{{playing}}">
+  <block wx:elif="{{playing}}">
     <view class="table-head">
       <text class="hand-no">第 {{room.handNo}} 手</text>
-      <text class="muted">{{statusLabel}}</text>
+      <text class="muted">{{statusLabel}} · 在线 {{onlineCount}}/{{seated.length}}</text>
       <view class="pot">底池 {{room.pot}}</view>
     </view>
 
     <view class="table">
-      <!-- 对手席位 -->
-      <view wx:for="{{opponents}}" wx:key="openid" class="seat {{item.isTurn ? 'turn' : ''}} {{item.folded ? 'folded' : ''}}">
+      <!-- 对手席位(房主可点离线玩家代为弃牌,P7)-->
+      <view wx:for="{{opponents}}" wx:key="openid" class="seat {{item.isTurn ? 'turn' : ''}} {{item.folded ? 'folded' : ''}}"
+            data-openid="{{item.openid}}" data-offline="{{item.offline}}" data-folded="{{item.folded}}" data-allin="{{item.allIn}}"
+            bindtap="onSeatTap">
         <view class="seat-l">
           <view class="seat-top">
             <text class="s-name">{{item.name}}</text>
+            <text wx:if="{{item.offline}}" class="tag off">离线</text>
             <text wx:if="{{item.isDealer}}" class="chip-btn">D</text>
             <text wx:if="{{item.isSB}}" class="tag blind">小盲</text>
             <text wx:elif="{{item.isBB}}" class="tag blind">大盲</text>
           </view>
-          <view class="s-chips">筹码 {{item.chips}}</view>
+          <view class="s-chips">筹码 {{item.chips}}<text wx:if="{{item.debt > 0}}"> · 欠 {{item.debt}}</text></view>
         </view>
         <view class="seat-r">
           <view class="s-cards">
@@ -56,6 +91,10 @@
             <text wx:if="{{myPlayer.isTurn}}" class="tag me">轮到你行动</text>
           </view>
           <view class="me-chips">筹码 {{myPlayer.chips || 0}}</view>
+          <view class="debt-line muted" wx:if="{{loanEnabled && ((myPlayer.debt || 0) > 0 || (myPlayer.loan || 0) > 0)}}">
+            借入 {{myPlayer.loan || 0}} · 欠款 {{myPlayer.debt || 0}}
+          </view>
+          <button wx:if="{{canRepay}}" class="btn btn-ghost mini-btn" size="mini" catchtap="onRepay">还款</button>
           <view wx:if="{{myPlayer.bet > 0}}" class="s-bet">本轮 {{myPlayer.bet}}</view>
         </view>
       </view>
@@ -89,10 +128,30 @@
         <view class="muted center-text act-hint">{{actionBar.canCheck ? '无人加注,可看牌把行动传给下家' : '面前有下注:只能跟注 / 加注 / 弃牌'}}</view>
       </block>
 
-      <!-- 非本人行动提示(摊牌已在 action 内原子结算并回大厅,P4)-->
+      <!-- 非本人行动提示 -->
       <block wx:else>
-        <view wx:if="{{playing && room.turnSeat !== -1}}" class="muted center-text">等待 {{turnName}} 行动…</view>
+        <view wx:if="{{room.turnSeat !== -1}}" class="muted center-text">等待 {{turnName}} 行动…</view>
       </block>
+
+      <!-- P8 发起结束投票 + §6.5 主动亮牌 -->
+      <view class="tool-row">
+        <button class="btn btn-ghost mini-btn" size="mini" bindtap="onProposeEnd">提议结束本局</button>
+        <button class="btn btn-ghost mini-btn" size="mini" bindtap="onReveal">亮牌</button>
+        <button class="btn btn-ghost mini-btn" size="mini" bindtap="onOpenRecords">牌局记录</button>
+      </view>
+
+      <!-- P8 投票条 -->
+      <view wx:if="{{endVoteView.active}}" class="vote-bar">
+        <view class="v-title">{{endVoteView.initiatorName}} 发起「结束本局」投票</view>
+        <view class="muted v-sub">同意 {{endVoteView.yesCount}} / {{endVoteView.total}} · 离线玩家自动豁免{{endVoteView.rejected ? ' · 已有人反对' : ''}}</view>
+        <block wx:if="{{!endVoteView.myVoted}}">
+          <view class="v-actions">
+            <button class="btn act check" bindtap="onVoteAgree">同意</button>
+            <button class="btn act fold" bindtap="onVoteReject">反对</button>
+          </view>
+        </block>
+        <view wx:else class="muted center-text">已表态,等待其他人…</view>
+      </view>
     </view>
   </block>
 
@@ -108,12 +167,13 @@
       <text class="muted">盲注 {{room.config.sb}} / {{room.config.bb}}</text>
       <text class="muted">初始 {{room.config.initialChips}}</text>
       <text class="muted">{{room.config.loan.enabled ? '借款开' : '借款关'}}</text>
+      <text class="muted">在线 {{onlineCount}}/{{seated.length}}</text>
     </view>
 
     <!-- ======== P4 上局结果面板(waiting 态展示,startHand 时清空)======== -->
     <view wx:if="{{lastResultView}}" class="last-result">
-      <view class="lr-title">{{lastResultView.title}} · 底池 {{lastResultView.potTotal}}</view>
-      <view class="community">
+      <view class="lr-title">{{lastResultView.title}}<block wx:if="{{lastResultView.potTotal}}"> · 底池 {{lastResultView.potTotal}}</block></view>
+      <view wx:if="{{lastResultView.communitySlots[2]}}" class="community">
         <card wx:for="{{lastResultView.communitySlots}}" wx:key="index" wx:for-item="c" size="sm" card="{{c}}" />
       </view>
       <view wx:for="{{lastResultView.lines}}" wx:key="index" class="lr-line">{{item}}</view>
@@ -125,6 +185,21 @@
       </view>
     </view>
 
+    <!-- ======== P6 借款/还款卡(waiting 态,借款开启时展示)======== -->
+    <view wx:if="{{loanEnabled && myPlayer}}" class="loan-card">
+      <view class="loan-row">
+        <text>我的筹码</text><text class="gold">{{myPlayer.chips || 0}}</text>
+        <text>借入</text><text>{{myPlayer.loan || 0}}</text>
+        <text>欠款</text><text class="{{myPlayer.debt > 0 ? 'red' : ''}}">{{myPlayer.debt || 0}}</text>
+      </view>
+      <view class="loan-actions">
+        <button wx:if="{{canBorrow}}" class="btn btn-ghost mini-btn" size="mini" bindtap="onBorrow">借款 {{borrowAmount}}</button>
+        <button wx:if="{{canRepay}}" class="btn btn-ghost mini-btn" size="mini" bindtap="onRepay">还款</button>
+        <text wx:if="{{myPlayer.chips === 0 && !canBorrow}}" class="muted">已达借款上限或未配置</text>
+        <text wx:elif="{{myPlayer.chips === 0}}" class="muted red">筹码归零,可借款继续游戏</text>
+      </view>
+    </view>
+
     <view class="players">
       <view class="players-title">玩家 ({{seated.length}}/10)</view>
       <view wx:for="{{seated}}" wx:key="openid" class="player">
@@ -132,17 +207,37 @@
           <text>{{item.name}}</text>
           <text wx:if="{{item.openid === room.hostOpenid}}" class="tag">房主</text>
           <text wx:if="{{item.isMe}}" class="tag me">你</text>
+          <text wx:if="{{item.offline}}" class="tag off">离线</text>
         </view>
-        <view class="p-chips">{{item.chips}}</view>
+        <view class="p-chips">{{item.chips}}<text wx:if="{{item.debt > 0}}" class="red small-debt"> 欠{{item.debt}}</text></view>
         <view wx:if="{{isHost && !item.isMe && room.status === 'waiting'}}" class="kick" data-openid="{{item.openid}}" bindtap="onKick">移出</view>
       </view>
     </view>
 
     <view class="bottom">
       <button wx:if="{{isHost}}" class="btn btn-primary {{seated.length >= 2 ? '' : 'disabled'}}" bindtap="onStart">{{seated.length >= 2 ? '开始发牌' : '等待玩家加入…(至少 2 人)'}}</button>
+      <view class="tool-row">
+        <button class="btn btn-ghost mini-btn" size="mini" bindtap="onOpenRecords">牌局记录</button>
+        <button wx:if="{{lastResultView}}" class="btn btn-ghost mini-btn" size="mini" bindtap="onReveal">亮出我的底牌</button>
+        <button wx:if="{{isHost}}" class="btn btn-ghost mini-btn danger-text" size="mini" bindtap="onEndGame">结束整局并清算</button>
+        <button wx:else class="btn btn-ghost mini-btn" size="mini" bindtap="onProposeEnd">提议结束本局</button>
+      </view>
       <button class="btn btn-ghost" bindtap="onLeave">离开房间</button>
     </view>
   </block>
+
+  <!-- 全局投票条(waiting 态也可见投票进度)-->
+  <view wx:if="{{endVoteView.active && room.status !== 'closed' && !playing}}" class="vote-bar vote-dock">
+    <view class="v-title">{{endVoteView.initiatorName}} 发起「结束本局」投票</view>
+    <view class="muted v-sub">同意 {{endVoteView.yesCount}} / {{endVoteView.total}}{{endVoteView.rejected ? ' · 已有人反对' : ''}}</view>
+    <block wx:if="{{!endVoteView.myVoted}}">
+      <view class="v-actions">
+        <button class="btn act check" bindtap="onVoteAgree">同意</button>
+        <button class="btn act fold" bindtap="onVoteReject">反对</button>
+      </view>
+    </block>
+    <view wx:else class="muted center-text">已表态,等待其他人…</view>
+  </view>
 </view>
 
 <view class="container center" wx:elif="{{watcherReady}}">

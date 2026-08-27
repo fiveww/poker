@@ -25,7 +25,7 @@ exports.main = async (event) => {
     return { ok: false, code: 'FORBIDDEN', error: '仅房主可踢人' }
   }
   if (room.status !== 'waiting') {
-    return { ok: false, code: 'IN_PROGRESS', error: '牌局进行中,暂不支持离座(待 P7 重连)' }
+    return { ok: false, code: 'IN_PROGRESS', error: '牌局进行中不能移出座位;可对离线玩家「代为弃牌」推进牌局' }
   }
 
   const players = room.players || []

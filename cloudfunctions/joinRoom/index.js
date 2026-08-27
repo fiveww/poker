@@ -22,14 +22,14 @@ exports.main = async (event) => {
   const room = found.data[0]
   const roomId = room._id
 
-  if (room.status === 'closed') return { ok: false, code: 'CLOSED', error: '房间已关闭' }
-  if (room.status !== 'waiting') return { ok: false, code: 'IN_PROGRESS', error: '牌局已开始,无法加入' }
-
   const players = room.players || []
 
-  // 幂等:已在座则直接返回
+  // 幂等:已在座则直接返回(P7 重连:牌局进行中也放行回桌,断线重连不丢座)
   const me = players.find((p) => p.openid === openid)
-  if (me) return { ok: true, roomId, seat: me.seat, alreadyIn: true }
+  if (me) return { ok: true, roomId, seat: me.seat, alreadyIn: true, status: room.status }
+
+  if (room.status === 'closed') return { ok: false, code: 'CLOSED', error: '房间已关闭' }
+  if (room.status !== 'waiting') return { ok: false, code: 'IN_PROGRESS', error: '牌局已开始,仅房间成员可回桌' }
 
   if (players.length >= 10) return { ok: false, code: 'FULL', error: '房间已满(10 人)' }
 

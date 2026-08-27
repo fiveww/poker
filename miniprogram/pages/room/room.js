@@ -14,6 +14,9 @@ const STATUS_LABELS = {
   showdown: '摊牌'
 }
 
+// 离线判定阈值:与云函数(action 代弃牌 / voteEnd 豁免)保持一致
+const OFFLINE_MS = 90 * 1000
+
 Page({
   data: {
     roomId: '',
@@ -30,7 +33,16 @@ Page({
     communitySlots: ['', '', '', '', ''], // 公共牌 5 格('' = 空位)
     // —— P3 行动条视图 ——
     actionBar: null, // null = 非本人行动(myTurn 时含 check/call 额、加注区间等预计算字段)
-    raisePanel: false // 加注面板展开态(面板渲染在 myTurn 区块内,轮次变化自动收起)
+    raisePanel: false, // 加注面板展开态(面板渲染在 myTurn 区块内,轮次变化自动收起)
+    // —— P6 借款视图 ——
+    loanEnabled: false,
+    canBorrow: false,
+    borrowAmount: 0,
+    canRepay: false,
+    // —— P7 在线状态 ——
+    onlineCount: 0,
+    // —— P8 投票视图 ——
+    endVoteView: null // { initiatorName, yesCount, total, myVoted }
   },
 
   onLoad(query) {
@@ -48,7 +60,20 @@ Page({
     this.openWatcher()
   },
 
+  onShow() {
+    // P7:回到前台立即拉全量对齐(watch 可能错过期间的推送),并恢复心跳
+    if (this.data.roomId && app.globalData.openid) {
+      this.syncNow()
+    }
+    this.startTimers()
+  },
+
+  onHide() {
+    this.stopTimers()
+  },
+
   onUnload() {
+    this.stopTimers()
     this.closeWatcher()
     this.closeHandsWatcher()
   },
@@ -75,6 +100,8 @@ Page({
         },
         onError: (err) => {
           console.error('watch rooms error', err)
+          // 推送通道异常 → 拉全量兜底(P7),后续 onShow 心跳持续对齐
+          this.syncNow()
         }
       })
   },
@@ -87,7 +114,7 @@ Page({
   },
 
   // 本人 hands 文档的 watch(P2):正常情况实时收到底牌;
-  // 云函数管理员写库推送不可靠时由 fetchMyHand 拉取兜底。
+  // 云函数管理员写库推送不可靠时由 fetchMyHand/syncState 拉取兜底。
   openHandsWatcher() {
     if (this.handsWatcher || !app.globalData.openid) return
     const db = wx.cloud.database()
@@ -134,8 +161,64 @@ Page({
     }
   },
 
-  // 统一入口:内容无变化则跳过渲染
-  applyRoom(room) {
+  // ======== P7 重连与心跳 ========
+
+  startTimers() {
+    if (!app.globalData.openid) return
+    this.stopTimers()
+    // 心跳:周期调 syncState 刷新本人 connected/lastSeen,顺带拉全量兜底
+    this._hbTimer = setInterval(() => this.syncNow(), 20 * 1000)
+    // 存在感渲染:lastSeen 是本地更新的,watch 推送无关 → 定期重算离线标签
+    this._presenceTimer = setInterval(() => this.refreshPresence(), 10 * 1000)
+  },
+
+  stopTimers() {
+    if (this._hbTimer) {
+      clearInterval(this._hbTimer)
+      this._hbTimer = null
+    }
+    if (this._presenceTimer) {
+      clearInterval(this._presenceTimer)
+      this._presenceTimer = null
+    }
+  },
+
+  syncNow() {
+    const roomId = this.data.roomId
+    if (!roomId || this._syncing) return
+    this._syncing = true
+    actions
+      .syncState(roomId)
+      .then((res) => {
+        if (res.room) this.applyRoom(res.room)
+        if (
+          res.myHand &&
+          this._lastHandNoFetched === res.myHand.handNo &&
+          res.myHand.holeCards &&
+          res.myHand.holeCards.length
+        ) {
+          this.setData({ myHoleCards: res.myHand.holeCards })
+        }
+      })
+      .catch((e) => {
+        if (e.code === 'NOT_FOUND') this.closeWatcher()
+        console.error('syncState error', e)
+      })
+      .then(() => {
+        this._syncing = false
+      })
+  },
+
+  // 用缓存文档重算离线标签(lastSeen 本地推演,不触发额外请求)
+  refreshPresence() {
+    const room = this.data.room
+    if (!room) return
+    this.applyRoom(room, true)
+  },
+
+  // 统一入口:内容无变化则跳过渲染(force=true 强制重算在线标签等衍生字段)
+  applyRoom(room, force) {
+    this._rawRoom = room
     const sig = JSON.stringify([
       room.players,
       room.hostOpenid,
@@ -146,9 +229,10 @@ Page({
       room.dealerSeat,
       room.turnSeat,
       room.currentBet,
-      room.version
+      room.version,
+      room.endVote
     ])
-    if (sig === this._lastSig) return
+    if (!force && sig === this._lastSig) return
     this._lastSig = sig
     const openid = this.data.openid
     const playing = PLAYING_STATES.indexOf(room.status) !== -1
@@ -168,6 +252,8 @@ Page({
     const sbSeat = seatN < 2 ? -1 : seatN === 2 ? room.dealerSeat : nextOf(room.dealerSeat, 1)
     const bbSeat = seatN < 2 ? -1 : seatN === 2 ? nextOf(room.dealerSeat, 1) : nextOf(room.dealerSeat, 2)
 
+    const now = Date.now()
+
     // 预计算展示字段(WXML 不能调 page 方法)
     const players = (room.players || []).map((p) => ({
       ...p,
@@ -176,18 +262,21 @@ Page({
       isSB: p.seat === sbSeat,
       isBB: p.seat === bbSeat,
       isTurn: p.seat === room.turnSeat,
-      isMe: p.openid === openid
+      isMe: p.openid === openid,
+      // P7:离线标签(心跳超时或显式断开);房主可点击代为弃牌(仅进行中)
+      offline: p.connected === false || now - (p.lastSeen || 0) > OFFLINE_MS
     }))
     const opponents = players.filter((p) => !p.isMe)
     const myPlayer = players.find((p) => p.isMe) || null
+    const onlineCount = players.filter((p) => !p.offline).length
 
     const community = room.communityCards || []
     const communitySlots = [0, 1, 2, 3, 4].map((i) => community[i] || '')
 
-    // —— P4 大厅「上局结果」面板(WXML 不能调方法,在此展开成渲染友好的结构)——
+    // —— 大厅结果面板(waiting 展示上一手,closed 展示整局清算,startHand 时清空)——
     const lr = room.lastResult
     let lastResultView = null
-    if (!playing && lr && lr.handNo) {
+    if (lr && lr.handNo && (!playing || room.status === 'closed')) {
       lastResultView = {
         title: lr.title || '第 ' + lr.handNo + ' 手结束',
         lines: lr.lines || [],
@@ -239,6 +328,32 @@ Page({
       if (players[i].seat === room.turnSeat) turnName = players[i].name
     }
 
+    // —— P6 借款按钮可见性(waiting 态主用;下注阶段轮到本人时服务端也放行)——
+    const loanCfg = (room.config && room.config.loan) || {}
+    const loanEnabled = !!loanCfg.enabled
+    const canBorrow =
+      loanEnabled && !!myPlayer && myPlayer.chips === 0 &&
+      !(loanCfg.cap > 0 && (myPlayer.loan || 0) >= loanCfg.cap)
+    const canRepay =
+      loanEnabled && !!myPlayer && (myPlayer.debt || 0) > 0 && (myPlayer.chips || 0) > 0
+
+    // —— P8 投票条 ——
+    const ev = room.endVote || {}
+    let endVoteView = null
+    if (ev.active) {
+      const initiator = players.find((p) => p.openid === ev.initiator)
+      endVoteView = {
+        active: true,
+        initiatorName: (initiator && initiator.name) || '玩家',
+        yesCount: (ev.yes || []).length,
+        noCount: (ev.no || []).length,
+        total: players.length,
+        myVoted:
+          (ev.yes || []).indexOf(openid) !== -1 || (ev.no || []).indexOf(openid) !== -1,
+        rejected: (ev.no || []).length > 0
+      }
+    }
+
     this.setData({
       room,
       isHost: !!openid && room.hostOpenid === openid,
@@ -251,7 +366,13 @@ Page({
       communitySlots,
       lastResultView,
       actionBar,
-      turnName
+      turnName,
+      loanEnabled,
+      canBorrow,
+      borrowAmount: loanCfg.amount || 0,
+      canRepay,
+      onlineCount,
+      endVoteView
     })
 
     // 进入一手牌 → 拉自己的底牌;回到 waiting(手结束)→ 清空
@@ -268,6 +389,7 @@ Page({
   onBack() {
     this.closeWatcher()
     this.closeHandsWatcher()
+    this.stopTimers()
     wx.redirectTo({ url: '/pages/index/index' })
   },
 
@@ -298,6 +420,24 @@ Page({
     })
   },
 
+  // ======== P7:房主把离线玩家代为弃牌(完整走 action 的 fold 结算路径)========
+
+  onSeatTap(e) {
+    const { openid: target, offline, folded, allin } = e.currentTarget.dataset
+    const room = this.data.room
+    if (!room || !this.data.isHost || !this.data.playing) return
+    if (!offline || folded || allin) return
+    wx.showModal({
+      title: '标记对方弃牌?',
+      content: '该玩家当前离线,标记弃牌后牌局继续推进',
+      confirmText: '代弃',
+      success: async (r) => {
+        if (!r.confirm) return
+        await this.sendAction('fold', undefined, { forOpenid: target })
+      }
+    })
+  },
+
   // 房主开一手(P2):调 startHand,结果经 rooms watch 广播回来
   async onStart() {
     const room = this.data.room
@@ -319,14 +459,16 @@ Page({
   // ======== P3 行动 ========
 
   // 统一发送:CAS 冲突/校验失败都只 toast,新状态由 watch 推回后按钮自动刷新
-  async sendAction(action, amount) {
+  async sendAction(action, amount, extra) {
     const room = this.data.room
-    if (!room || !this.data.roomId || this._acting) return
+    if (!room || !this.data.roomId || this._acting) return false
     this._acting = true
     try {
-      await actions.doAction(this.data.roomId, room.version, action, amount)
+      await actions.doAction(this.data.roomId, room.version, action, amount, extra)
+      return true
     } catch (e) {
       wx.showToast({ title: e.message || '操作失败,请重试', icon: 'none' })
+      return false
     } finally {
       this._acting = false
     }
@@ -365,5 +507,118 @@ Page({
     if (!Number.isInteger(to)) return
     this.sendAction('raise', to)
     this.setData({ raisePanel: false })
+  },
+
+  // ======== P6 借款 / 还款 ========
+
+  onBorrow() {
+    wx.showModal({
+      title: '借款 ' + this.data.borrowAmount + '?',
+      content: '按还款倍率计入欠款,游戏结束强制扣除',
+      confirmText: '借款',
+      success: async (r) => {
+        if (!r.confirm) return
+        try {
+          await actions.borrow(this.data.roomId)
+          this.syncNow()
+        } catch (e) {
+          wx.showToast({ title: e.message || '借款失败', icon: 'none' })
+        }
+      }
+    })
+  },
+
+  onRepay() {
+    const mp = this.data.myPlayer
+    if (!mp) return
+    wx.showModal({
+      title: '还款',
+      content: '当前欠款 ' + mp.debt + ',筹码 ' + mp.chips + '\n输入还款金额(留空 = 全额还清)',
+      editable: true,
+      placeholderText: String(Math.min(mp.chips, mp.debt)),
+      confirmText: '还款',
+      success: async (r) => {
+        if (!r.confirm) return
+        const v = String(r.content || '').trim()
+        const amount = v ? parseInt(v, 10) : undefined
+        if (v && !Number.isInteger(amount)) {
+          wx.showToast({ title: '请输入整数金额', icon: 'none' })
+          return
+        }
+        try {
+          await actions.repay(this.data.roomId, amount)
+          this.syncNow()
+        } catch (e) {
+          wx.showToast({ title: e.message || '还款失败', icon: 'none' })
+        }
+      }
+    })
+  },
+
+  // ======== P8 投票结束 ========
+
+  onProposeEnd() {
+    wx.showModal({
+      title: '发起结束本局?',
+      content: '全员同意后本手作废、回退上一手结算点并清算关房',
+      confirmText: '发起',
+      success: async (r) => {
+        if (!r.confirm) return
+        try {
+          await actions.proposeEnd(this.data.roomId)
+        } catch (e) {
+          wx.showToast({ title: e.message || '发起失败', icon: 'none' })
+        }
+      }
+    })
+  },
+
+  onVoteAgree() {
+    actions.voteEnd(this.data.roomId, true).catch((e) =>
+      wx.showToast({ title: e.message || '投票失败', icon: 'none' })
+    )
+  },
+
+  onVoteReject() {
+    actions.voteEnd(this.data.roomId, false).catch((e) =>
+      wx.showToast({ title: e.message || '投票失败', icon: 'none' })
+    )
+  },
+
+  onEndGame() {
+    wx.showModal({
+      title: '结束整局并清算?',
+      content: '强制结清欠款(余额可为负),写终局记录后关房',
+      confirmText: '结束',
+      success: async (r) => {
+        if (!r.confirm) return
+        try {
+          await actions.endGame(this.data.roomId)
+        } catch (e) {
+          wx.showToast({ title: e.message || '操作失败', icon: 'none' })
+        }
+      }
+    })
+  },
+
+  // ======== P9 牌局记录入口 ========
+
+  // 主动亮底牌(§6.5):当前手结束后想晒牌时点一下
+  onReveal() {
+    actions.revealCards(this.data.roomId).then((r) => {
+      if (r.already) wx.showToast({ title: '你已亮过牌', icon: 'none' })
+    }).catch((e) =>
+      wx.showToast({ title: e.message || '亮牌失败', icon: 'none' })
+    )
+  },
+
+  onOpenRecords() {
+    wx.navigateTo({
+      url: '/pages/replay/replay?roomId=' + this.data.roomId + '&closed=' + (this.data.room && this.data.room.status === 'closed' ? 1 : 0)
+    })
+  },
+
+  onExitClosed() {
+    wx.reLaunch({ url: '/pages/index/index' })
   }
 })

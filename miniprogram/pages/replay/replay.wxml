@@ -1,0 +1,50 @@
+<view class="container">
+  <view class="tabs">
+    <view class="tab {{tab === 'recent' ? 'on' : ''}}" data-tab="recent" bindtap="onTab">最近 {{limits.historyLimit}} 局</view>
+    <view class="tab {{tab === 'fav' ? 'on' : ''}}" data-tab="fav" bindtap="onTab">收藏</view>
+    <view wx:if="{{expandedId}}" class="tab ghost" bindtap="collapse">收起重放</view>
+  </view>
+
+  <view wx:for="{{items}}" wx:key="id" class="hand-card" data-id="{{item.id}}">
+    <!-- 摘要行 -->
+    <view class="h-head" bindtap="onToggle" data-id="{{item.id}}">
+      <view class="h-main">
+        <view class="h-title">{{item.title}}{{item.potTotal > 0 ? ' · 底池 ' + item.potTotal : ''}}</view>
+        <view class="muted h-sub">{{item.timeText}}</view>
+        <view wx:if="{{item.winnersText}}" class="h-win">{{item.winnersText}}</view>
+      </view>
+      <view class="h-side" catchtap="onFav" data-id="{{item.id}}">
+        <text class="star {{item.favorite ? 'on' : ''}}">{{item.favorite ? '★' : '☆'}}</text>
+        <text class="muted small">{{item.expanded ? '收起' : '重放'}}</text>
+      </view>
+    </view>
+
+    <!-- 重放视图 -->
+    <view wx:if="{{item.expanded && !item.isFinal}}" class="replay">
+      <view class="community">
+        <card wx:for="{{viewCommSlots}}" wx:key="index" wx:for-item="c" size="sm" card="{{c}}" />
+      </view>
+
+      <view class="rp-stage">
+        <view class="muted rp-counter">第 {{curStep + 1}} / {{stepCount}} 步</view>
+        <view class="rp-text">{{curText}}</view>
+        <view class="rp-ctrl">
+          <button size="mini" class="btn btn-ghost mini-btn" bindtap="onPrev">‹ 上一步</button>
+          <button size="mini" class="btn btn-primary mini-btn" bindtap="onAutoToggle">{{autoPlay ? '暂停' : '自动播放'}}</button>
+          <button size="mini" class="btn btn-ghost mini-btn" bindtap="onNext">下一步 ›</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 终局清算记录(无重放,直接列最终余额)-->
+    <view wx:if="{{item.expanded && item.isFinal}}" class="final-list">
+      <view wx:for="{{finalLines}}" wx:key="index" class="lr-line">{{item}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{!loading && !items.length}}" class="muted empty">
+    {{tab === 'fav' ? '还没有收藏的牌局' : '暂无牌局记录,打完一手后显示在这里'}}
+  </view>
+
+  <button class="btn btn-ghost back-btn" bindtap="goBack">返回</button>
+</view>

@@ -1,0 +1,9 @@
+{
+  "name": "syncState",
+  "description": "P7 重连拉全量:rooms 文档 + 本人当前手 hands,兼心跳刷新 connected/lastSeen",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  },
+  "version": "1.0.0"
+}

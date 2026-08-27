@@ -1,0 +1,9 @@
+{
+  "name": "endGame",
+  "version": "1.0.0",
+  "description": "P8 房主结束整局:强制还款(可负)、终局 history、status=closed",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "voteEnd",
+  "version": "1.0.0",
+  "description": "P8 投票:记票、全员同意判定、快照回退、强制还款、isFinal 终局落库、关房",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

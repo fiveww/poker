@@ -82,6 +82,11 @@ exports.main = async (event) => {
   }
 
   const bySeat = new Map(players.map((p) => [p.seat, p]))
+  // 新手重置上一手残留的 allIn(此前保留旧值,chips 已补足者会被误判全下而永远跳过行动;
+  // P6 借款也依赖「chips==0 且未 allIn」的干净状态)。短码盲注的 allIn 由下方 postBlind 重标。
+  players.forEach((p) => {
+    p.allIn = false
+  })
   postBlind(bySeat.get(sbSeat), sb)
   postBlind(bySeat.get(bbSeat), bb)
 

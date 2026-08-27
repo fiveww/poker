@@ -1,0 +1,9 @@
+{
+  "name": "favoriteHand",
+  "version": "1.0.0",
+  "description": "P9 收藏/取消收藏 handHistory,超上限挤掉最早收藏",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

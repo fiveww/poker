@@ -1,0 +1,9 @@
+{
+  "name": "proposeEnd",
+  "version": "1.0.0",
+  "description": "P8 发起结束投票:endVote.active 置位、记录发起人与手号",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

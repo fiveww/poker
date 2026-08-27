@@ -236,3 +236,72 @@
   font-size: 24rpx;
   margin-top: -8rpx;
 }
+
+/* ======== P6 借款 / 还款 ======== */
+.loan-card {
+  background: #16401f;
+  border-radius: 16rpx;
+  padding: 24rpx 32rpx;
+  margin-bottom: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+.loan-row {
+  display: flex;
+  gap: 12rpx;
+  align-items: center;
+  color: #9bb0a3;
+  font-size: 26rpx;
+}
+.loan-row .gold { color: #e6c34d; font-weight: 600; }
+.loan-actions {
+  display: flex;
+  gap: 16rpx;
+  align-items: center;
+  min-height: 56rpx;
+}
+.gold { color: #e6c34d; }
+.red { color: #d06b6b; }
+.neg { color: #d06b6b; }
+.small-debt { font-size: 22rpx; font-weight: 400; }
+.mini-btn { font-size: 24rpx; padding-left: 20rpx; padding-right: 20rpx; }
+.danger-text { color: #c04040; }
+
+/* ======== P7 在线状态 ======== */
+.tag.off {
+  background: #3a2222;
+  color: #d09a9a;
+}
+
+/* ======== P8 投票条 ======== */
+.tool-row {
+  display: flex;
+  gap: 16rpx;
+  justify-content: center;
+}
+.vote-bar {
+  background: #2c3a1f;
+  border: 2rpx solid #6b6b30;
+  border-radius: 16rpx;
+  padding: 24rpx 28rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+.vote-bar .v-title {
+  color: #e6c34d;
+  font-weight: 600;
+}
+.v-sub { font-size: 24rpx; }
+.v-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+.v-actions .btn {
+  flex: 1;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}

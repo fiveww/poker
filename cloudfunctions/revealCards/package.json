@@ -1,0 +1,9 @@
+{
+  "name": "revealCards",
+  "version": "1.0.0",
+  "description": "主动亮本人底牌:muck 赢家/弃牌秀牌,写入 rooms.revealedHands",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
