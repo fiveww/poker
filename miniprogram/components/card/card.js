@@ -25,7 +25,9 @@ Component({
       const isRed = m[2] === 'h' || m[2] === 'd'
       // ︎:文本样式变体选择符,强制花色按文本(而非 emoji 彩色样式)渲染,黑桃/梅花才清晰
       const suitMap = { s: '♠︎', h: '♥︎', d: '♦︎', c: '♣︎' }
-      this.setData({ faceUp: true, empty: false, rank: m[1], suitChar: suitMap[m[2]], red: isRed })
+      // 内部记号 T 显示为 10
+      const rankText = m[1] === 'T' ? '10' : m[1]
+      this.setData({ faceUp: true, empty: false, rank: rankText, suitChar: suitMap[m[2]], red: isRed })
     }
   }
 })
