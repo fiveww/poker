@@ -266,7 +266,7 @@ Page({
       // P7:离线标签(心跳超时或显式断开);房主可点击代为弃牌(仅进行中)
       offline: p.connected === false || now - (p.lastSeen || 0) > OFFLINE_MS
     }))
-    const opponents = players.filter((p) => !p.isMe)
+    const opponents = players.filter((p) => !p.isMe).map((p, i) => ({ ...p, posIdx: i }))
     const myPlayer = players.find((p) => p.isMe) || null
     const onlineCount = players.filter((p) => !p.offline).length
 

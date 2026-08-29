@@ -4,9 +4,9 @@
 }
 
 .room-row {
-  background: #16401f;
-  border: 2rpx solid #2c5a36;
-  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.04);
+  border: 2rpx solid rgba(255, 255, 255, 0.06);
+  border-radius: 20rpx;
   padding: 28rpx 32rpx;
   margin-bottom: 20rpx;
   display: flex;
@@ -15,13 +15,13 @@
 }
 .r-main { display: flex; flex-direction: column; gap: 6rpx; }
 .r-code {
-  color: #e6c34d;
+  color: #e0b23e;
   font-size: 40rpx;
   font-weight: 700;
   letter-spacing: 4rpx;
 }
 .r-time { font-size: 22rpx; }
-.r-join { color: #9bb0a3; font-size: 26rpx; }
+.r-join { color: #7d8f82; font-size: 26rpx; }
 
 .empty {
   text-align: center;
@@ -30,4 +30,4 @@
 }
 
 .clear-btn { margin-top: 48rpx; }
-.danger { border-color: #c04040; color: #c04040; }
+.danger { border-color: rgba(192, 64, 64, 0.5); color: #d06b6b; }

@@ -1,15 +1,16 @@
-/* 扑克牌卡面(P2):纯 CSS,白底圆角;背面深红斜纹 */
+/* 扑克牌卡面:纯 CSS,无图片;PokerNow 风格 — 米白面 + 扁平牌背 */
 .card {
   box-sizing: border-box;
-  border-radius: 10rpx;
-  background: #fdfbf5;
-  border: 2rpx solid #c9c4b4;
+  border-radius: 8rpx;
+  background: #f7f3e8;
+  border: 2rpx solid #d8d2c0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.35);
 }
 
 /* 尺寸(sm 用于公共牌/对手区,lg 用于我的底牌) */
@@ -19,7 +20,7 @@
 
 .card.front .rank {
   font-weight: 700;
-  color: #1a1a1a;
+  color: #1c1c1c;
   line-height: 1;
 }
 /* 黑花色:纯黑加粗,防止浅灰看不清 */
@@ -39,22 +40,23 @@
 .card.red .rank,
 .card.red .suit { color: #c0392b; }
 
-/* 牌背:深红底 + 斜纹(渐变模拟) */
+/* 牌背:PokerNow 风扁平金棕斜纹 */
 .card.back {
   background:
     repeating-linear-gradient(
       45deg,
-      #7b2d26 0,
-      #7b2d26 8rpx,
-      #8f3a32 8rpx,
-      #8f3a32 16rpx
+      #b8873c 0,
+      #b8873c 6rpx,
+      #d4a75a 6rpx,
+      #d4a75a 12rpx
     );
-  border-color: #5e211c;
+  border-color: #8a6327;
+  box-shadow: inset 0 0 0 4rpx rgba(255, 240, 200, 0.18), 0 2rpx 6rpx rgba(0, 0, 0, 0.35);
 }
 
 /* 空位:虚线透明框(公共牌未发处) */
 .card.empty {
-  background: transparent;
-  border: 2rpx dashed #3a6647;
+  background: rgba(0, 0, 0, 0.15);
+  border: 2rpx dashed rgba(255, 255, 255, 0.18);
+  box-shadow: none;
 }
-

@@ -3,19 +3,22 @@
   margin-bottom: 48rpx;
 }
 .hero .title {
-  font-size: 52rpx;
+  font-size: 56rpx;
   font-weight: 700;
-  color: #e6c34d;
+  color: #e0b23e;
+  letter-spacing: 8rpx;
 }
 .hero .subtitle {
   font-size: 24rpx;
-  color: #9bb0a3;
+  color: #7d8f82;
   margin-top: 12rpx;
+  letter-spacing: 2rpx;
 }
 
 .login-status {
-  background: #16401f;
-  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.04);
+  border: 2rpx solid rgba(255, 255, 255, 0.06);
+  border-radius: 20rpx;
   padding: 28rpx 32rpx;
   margin-bottom: 48rpx;
 }
@@ -25,12 +28,12 @@
   gap: 8rpx;
 }
 .login-status .openid {
-  color: #9bb0a3;
+  color: #7d8f82;
   font-size: 24rpx;
   word-break: break-all;
 }
 .login-status .loading {
-  color: #9bb0a3;
+  color: #7d8f82;
 }
 
 .actions {
@@ -46,6 +49,6 @@
 }
 
 .history-btn {
-  border-color: #9bb0a3;
-  color: #e6c34d;
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #aab8ad;
 }

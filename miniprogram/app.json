@@ -2,10 +2,10 @@
   "pages": ["pages/index/index", "pages/create/create", "pages/room/room", "pages/history/history", "pages/replay/replay"],
   "window": {
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#1f6f3a",
+    "navigationBarBackgroundColor": "#0d1b12",
     "navigationBarTitleText": "德扑",
     "navigationBarTextStyle": "white",
-    "backgroundColor": "#0e2a18"
+    "backgroundColor": "#0d1b12"
   },
   "sitemapLocation": "sitemap.json",
   "style": "v2",

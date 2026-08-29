@@ -21,7 +21,7 @@
   <view class="card">
     <view class="row between">
       <text class="label nomargin">借款</text>
-      <switch checked="{{loanEnabled}}" bindchange="toggleLoan" color="#e6c34d" />
+      <switch checked="{{loanEnabled}}" bindchange="toggleLoan" color="#e0b23e" />
     </view>
     <view wx:if="{{loanEnabled}}" class="loan-block">
       <view class="muted hint">开启后:筹码归零方可借,游戏结束强制还款(余额可为负)</view>

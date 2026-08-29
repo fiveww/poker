@@ -36,42 +36,43 @@
     <view class="table-head">
       <text class="hand-no">第 {{room.handNo}} 手</text>
       <text class="muted">{{statusLabel}} · 在线 {{onlineCount}}/{{seated.length}}</text>
-      <view class="pot">底池 {{room.pot}}</view>
     </view>
 
     <view class="table">
-      <!-- 对手席位(房主可点离线玩家代为弃牌,P7)-->
-      <view wx:for="{{opponents}}" wx:key="openid" class="seat {{item.isTurn ? 'turn' : ''}} {{item.folded ? 'folded' : ''}}"
+      <!-- 中央毛毡区:公共牌 + 底池 -->
+      <view class="felt">
+        <view class="pot-chip">底池 {{room.pot}}</view>
+        <view class="community">
+          <card wx:for="{{communitySlots}}" wx:key="index" wx:for-item="c" size="md" card="{{c}}" />
+        </view>
+      </view>
+
+      <!-- 对手席位:椭圆桌边绝对定位(房主可点离线玩家代为弃牌,P7)-->
+      <view wx:for="{{opponents}}" wx:key="openid"
+            class="seat pos-{{item.posIdx}} pos-n{{opponents.length}} {{item.isTurn ? 'turn' : ''}} {{item.folded ? 'folded' : ''}}"
             data-openid="{{item.openid}}" data-offline="{{item.offline}}" data-folded="{{item.folded}}" data-allin="{{item.allIn}}"
             bindtap="onSeatTap">
-        <view class="seat-l">
-          <view class="seat-top">
-            <text class="s-name">{{item.name}}</text>
-            <text wx:if="{{item.offline}}" class="tag off">离线</text>
-            <text wx:if="{{item.isDealer}}" class="chip-btn">D</text>
-            <text wx:if="{{item.isSB}}" class="tag blind">小盲</text>
-            <text wx:elif="{{item.isBB}}" class="tag blind">大盲</text>
-          </view>
-          <view class="s-chips">筹码 {{item.chips}}<text wx:if="{{item.debt > 0}}"> · 欠 {{item.debt}}</text></view>
+        <view class="seat-cards">
+          <block wx:if="{{!item.folded}}">
+            <card size="sm" card="back" />
+            <card size="sm" card="back" />
+          </block>
         </view>
-        <view class="seat-r">
-          <view class="s-cards">
-            <block wx:if="{{!item.folded}}">
-              <card size="sm" card="back" />
-              <card size="sm" card="back" />
-            </block>
-            <text wx:else class="s-folded">已弃牌</text>
-          </view>
-          <view wx:if="{{item.bet > 0}}" class="s-bet">下注 {{item.bet}}</view>
+        <view class="seat-avatar">
+          <view class="s-name">{{item.name}}</view>
+          <view class="s-chips">{{item.chips}}<text wx:if="{{item.debt > 0}}" class="s-debt"> 欠{{item.debt}}</text></view>
         </view>
+        <view class="seat-tags">
+          <text wx:if="{{item.isDealer}}" class="chip-btn">D</text>
+          <text wx:if="{{item.offline}}" class="tag off">离线</text>
+          <text wx:elif="{{item.folded}}" class="tag fold-tag">弃牌</text>
+          <text wx:if="{{item.isSB}}" class="tag blind">SB</text>
+          <text wx:elif="{{item.isBB}}" class="tag blind">BB</text>
+        </view>
+        <view wx:if="{{item.bet > 0}}" class="s-bet">{{item.bet}}</view>
       </view>
 
-      <!-- 公共区:5 张公共牌 -->
-      <view class="community">
-        <card wx:for="{{communitySlots}}" wx:key="index" wx:for-item="c" size="md" card="{{c}}" />
-      </view>
-
-      <!-- 我的底牌 + 信息 -->
+      <!-- 我的底牌 + 信息(桌子正下方,压在桌沿)-->
       <view class="me-panel">
         <view class="me-cards">
           <block wx:if="{{myHoleCards.length}}">
@@ -90,12 +91,12 @@
             <text wx:elif="{{myPlayer.isBB}}" class="tag blind">大盲</text>
             <text wx:if="{{myPlayer.isTurn}}" class="tag me">轮到你行动</text>
           </view>
-          <view class="me-chips">筹码 {{myPlayer.chips || 0}}</view>
+          <view class="me-chips">{{myPlayer.chips || 0}}</view>
           <view class="debt-line muted" wx:if="{{loanEnabled && ((myPlayer.debt || 0) > 0 || (myPlayer.loan || 0) > 0)}}">
             借入 {{myPlayer.loan || 0}} · 欠款 {{myPlayer.debt || 0}}
           </view>
           <button wx:if="{{canRepay}}" class="btn btn-ghost mini-btn" size="mini" catchtap="onRepay">还款</button>
-          <view wx:if="{{myPlayer.bet > 0}}" class="s-bet">本轮 {{myPlayer.bet}}</view>
+          <view wx:if="{{myPlayer.bet > 0}}" class="me-bet">本轮 {{myPlayer.bet}}</view>
         </view>
       </view>
     </view>
@@ -111,7 +112,7 @@
             <button class="preset" size="mini" data-v="{{actionBar.presetPot}}" bindtap="onPreset">满池 {{actionBar.presetPot}}</button>
             <button class="preset allin" size="mini" data-v="{{actionBar.presetAllIn}}" bindtap="onPreset">全下 {{actionBar.presetAllIn}}</button>
           </view>
-          <slider min="{{actionBar.minTo}}" max="{{actionBar.maxTo}}" step="{{actionBar.step}}" value="{{actionBar.raiseTo}}" activeColor="#e6c34d" backgroundColor="#2c5a36" block-size="20" bindchanging="onRaiseSlide" bindchange="onRaiseSlide" />
+          <slider min="{{actionBar.minTo}}" max="{{actionBar.maxTo}}" step="{{actionBar.step}}" value="{{actionBar.raiseTo}}" activeColor="#e0b23e" backgroundColor="#3a4a3e" block-size="20" bindchanging="onRaiseSlide" bindchange="onRaiseSlide" />
           <view class="raise-actions">
             <button class="btn btn-ghost" size="mini" bindtap="onRaisePanelClose">取消</button>
             <button class="btn btn-primary" size="mini" bindtap="onRaiseConfirm">加注到 {{actionBar.raiseTo}}</button>
